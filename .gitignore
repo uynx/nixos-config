@@ -1,0 +1,7 @@
+result
+result-*
+.direnv
+.env
+.env.local
+*.bak
+.DS_Store
