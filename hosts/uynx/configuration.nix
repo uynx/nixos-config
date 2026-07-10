@@ -32,17 +32,24 @@
 
   time.timeZone = "America/Chicago";
 
-  # Flakes from day one.
+  # Determinate Nix (module from determinate input). Keep flakes on.
   nix.settings = {
     experimental-features = [
       "nix-command"
       "flakes"
     ];
-    # Optional: community Asahi binary cache — enable when building kernels often.
-    # See: https://github.com/nix-community/nixos-apple-silicon/blob/main/docs/binary-cache.md
+    trusted-users = [
+      "root"
+      "uynx"
+    ];
+    # Optional later: Asahi community binary cache for kernels
+    # https://github.com/nix-community/nixos-apple-silicon/blob/main/docs/binary-cache.md
   };
 
   nixpkgs.config.allowUnfree = true;
+
+  # Docker replaces Colima/Lima on Linux (native, not VM-in-VM).
+  virtualisation.docker.enable = true;
 
   users.users.uynx = {
     isNormalUser = true;
@@ -51,9 +58,13 @@
       "networkmanager"
       "video"
       "audio"
+      "docker"
     ];
+    shell = pkgs.fish;
     # Set password on install (`passwd`) or with hashedPassword later.
   };
+
+  programs.fish.enable = true;
 
   environment.systemPackages = with pkgs; [
     git
@@ -62,7 +73,7 @@
     curl
   ];
 
-  # First boot minimal shell; add DE/WM when ready.
+  # Dual-boot: console first; add DE/WM later (no AeroSpace on Linux).
   # services.xserver.enable = true;
 
   system.stateVersion = "25.11";

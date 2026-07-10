@@ -1,27 +1,40 @@
 # nixos-config
 
-NixOS flake for Apple Silicon (Asahi) on **MacBookPro18,3** (M1 Pro). Separate from macOS `~/nix-darwin-config`.
+NixOS flake for Apple Silicon (Asahi) on **MacBookPro18,3** (M1 Pro, ~1 TB SSD).  
+Separate from macOS `~/nix-darwin-config`. Dual-boot target: **~½ disk each**.
 
 ## Inputs
 
 | Input | Role |
 |-------|------|
 | `nixpkgs` (`nixos-unstable`) | Base packages / modules |
-| `nixos-apple-silicon` | Asahi kernel, m1n1/U-Boot, firmware hooks |
-| `home-manager` | User env (hooked; user module commented until install) |
-| `nix-index-database` | `comma` / nix-index for HM |
+| `nixos-apple-silicon` | Asahi kernel, m1n1/U-Boot, firmware |
+| `home-manager` | User env (`hosts/uynx/home.nix`) |
+| `nix-index-database` | `comma` / nix-index |
+| `determinate` | Determinate Nix (`nixosModules.default`) |
 
-## Status
+## Dual-boot size (this machine)
 
-Scaffold only. Next:
+| | |
+|--|--|
+| Internal SSD | ~**994 GB** usable (APPLE SSD AP1024R) |
+| macOS free today | ~**832 GB** free — resize is fine |
+| Target | macOS ≈ **500 GB**, NixOS root ≈ **480–500 GB** (plus small EFI + stub from Asahi installer) |
 
-1. Build/download Asahi NixOS installer ISO ([uefi-standalone guide](https://github.com/nix-community/nixos-apple-silicon/blob/main/docs/uefi-standalone.md))
-2. Asahi installer → UEFI environment + free space
-3. Install, generate `hosts/uynx/hardware-configuration.nix`, uncomment import
-4. Port CLI/home pieces from Darwin `home.nix` carefully (not a drop-in)
+Asahi installer does the **safe** resize of the APFS container. Do **not** use a generic partitioner on the whole disk (can brick recovery/iBoot).
+
+## Home port vs Darwin
+
+**Kept (Linux-ok):** CLI tools, nvim/tmux/ghostty/dotfiles + agents symlinks, fish/starship/atuin/…, git/gh, vscodium, discord, brave, languages, texlive full, games/tools that are cross-platform.
+
+**Dropped (mac-only):** AeroSpace, SketchyBar, duti, Colima, Lima, `whatsapp-for-mac`, Homebrew paths, quarantine `unb`, Darwin `targets.*`.
+
+**Linux swaps:** Docker (system) instead of Colima; `pkgs.ghostty`; LibreOffice CLI aliases; `reb` → `nixos-rebuild`; home under `/home/uynx`.
 
 ## Rebuild (on NixOS)
 
 ```bash
 sudo nixos-rebuild switch --flake ~/nixos-config#uynx
 ```
+
+First rebuild with Determinate may need cache flags (see Determinate docs) if packages aren't cached yet.

@@ -19,6 +19,9 @@
       url = "github:nix-community/nix-index-database";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Same family as nix-darwin-config; NixOS module (not darwin).
+    determinate.url = "https://flakehub.com/f/DeterminateSystems/determinate/*";
   };
 
   outputs =
@@ -28,16 +31,18 @@
       nixos-apple-silicon,
       home-manager,
       nix-index-database,
+      determinate,
       ...
     }:
     {
       nixosConfigurations = {
-        # M1 Pro MacBook Pro (MacBookPro18,3) — dual-boot or bare metal Asahi.
+        # M1 Pro MacBook Pro (MacBookPro18,3) — dual-boot ~½ SSD each.
         # hardware-configuration.nix is generated on the machine during install.
         "uynx" = nixpkgs.lib.nixosSystem {
           system = "aarch64-linux";
           specialArgs = { inherit inputs; };
           modules = [
+            determinate.nixosModules.default
             nixos-apple-silicon.nixosModules.apple-silicon-support
             ./hosts/uynx/configuration.nix
             home-manager.nixosModules.home-manager
@@ -50,7 +55,7 @@
                 sharedModules = [
                   nix-index-database.homeModules.nix-index
                 ];
-                # users.uynx = import ./hosts/uynx/home.nix;  # add after install
+                users.uynx = import ./hosts/uynx/home.nix;
               };
             }
           ];
