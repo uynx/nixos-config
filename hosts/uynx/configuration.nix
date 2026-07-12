@@ -1,38 +1,42 @@
 {
-  config,
   pkgs,
-  lib,
-  inputs,
   ...
 }:
 
 {
   imports = [
-    # Generated on the target machine by `nixos-generate-config --root /mnt`.
-    # Uncomment after first install (or copy the generated file in):
-    # ./hardware-configuration.nix
+    ./hardware-configuration.nix
   ];
 
-  # --- Asahi / Apple Silicon (required) ---
-  hardware.asahi.enable = true;
+  hardware = {
+    asahi = {
+      enable = true;
+      peripheralFirmwareDirectory = ../../firmware;
+    };
+    bluetooth = {
+      enable = true;
+      powerOnBoot = true;
+    };
+  };
 
-  boot.loader.systemd-boot.enable = true;
-  # Asahi UEFI: must stay false (installer docs).
-  boot.loader.efi.canTouchEfiVariables = false;
+  boot = {
+    loader = {
+      systemd-boot.enable = true;
+      efi.canTouchEfiVariables = false;
+    };
+    extraModprobeConfig = ''
+      options hid_apple iso_layout=0
+    '';
+  };
 
-  # US keyboard: stop ` / < swap on Apple keyboards (common Asahi fix).
-  boot.extraModprobeConfig = ''
-    options hid_apple iso_layout=0
-  '';
-
-  networking.hostName = "uynx";
-  networking.networkmanager.enable = true;
-  # iwd: better WPA3 on Broadcom (Asahi docs recommendation).
-  networking.networkmanager.wifi.backend = "iwd";
+  networking = {
+    hostName = "uynx";
+    networkmanager.enable = true;
+    networkmanager.wifi.backend = "iwd";
+  };
 
   time.timeZone = "America/Chicago";
 
-  # Determinate Nix (module from determinate input). Keep flakes on.
   nix.settings = {
     experimental-features = [
       "nix-command"
@@ -48,7 +52,6 @@
 
   nixpkgs.config.allowUnfree = true;
 
-  # Docker replaces Colima/Lima on Linux (native, not VM-in-VM).
   virtualisation.docker.enable = true;
 
   users.users.uynx = {
@@ -61,7 +64,6 @@
       "docker"
     ];
     shell = pkgs.fish;
-    # Set password on install (`passwd`) or with hashedPassword later.
   };
 
   programs.fish.enable = true;
@@ -71,10 +73,41 @@
     vim
     wget
     curl
+    ghostty
+    fuzzel
+    brave
+    antigravity
+    brightnessctl
   ];
 
-  # Dual-boot: console first; add DE/WM later (no AeroSpace on Linux).
-  # services.xserver.enable = true;
+  services = {
+    blueman.enable = true;
+    xserver.enable = true;
+    pipewire = {
+      enable = true;
+      alsa.enable = true;
+      pulse.enable = true;
+    };
+    greetd = {
+      enable = true;
+      settings = {
+        default_session = {
+          command = "${pkgs.tuigreet}/bin/tuigreet --time --cmd start-hyprland";
+          user = "greeter";
+        };
+      };
+    };
+    gnome.gnome-keyring.enable = true;
+  };
+
+  security.pam.services.greetd.enableGnomeKeyring = true;
+
+  fonts.packages = with pkgs; [
+    nerd-fonts.hack
+    julia-mono
+  ];
+
+  programs.hyprland.enable = true;
 
   system.stateVersion = "25.11";
 }

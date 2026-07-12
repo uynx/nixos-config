@@ -5,11 +5,6 @@
   ...
 }:
 
-# Port of ~/nix-darwin-config/home.nix for aarch64-linux.
-# Dropped: darwin targets, AeroSpace, SketchyBar, duti, Colima, Lima,
-# whatsapp-for-mac, Homebrew paths, quarantine helpers.
-# Linux swaps: Docker (system) for Colima; ghostty package; libreoffice CLI.
-
 let
   gitKey = "~/.ssh/id_ed25519.pub";
 in
@@ -23,6 +18,15 @@ in
       VISUAL = "nvim";
       AGY_CLI_DISABLE_AUTO_UPDATE = "true";
     };
+  };
+
+  home.pointerCursor = {
+    enable = true;
+    gtk.enable = true;
+    x11.enable = true;
+    package = pkgs.bibata-cursors;
+    name = "Bibata-Modern-Classic";
+    size = 24;
   };
 
   home.packages = with pkgs; [
@@ -55,7 +59,7 @@ in
         setuptools
       ]
     ))
-    clang
+    gnumake
     ast-grep
     lua5_1
     luarocks
@@ -73,7 +77,6 @@ in
     nixfmt
     statix
 
-    # Full TeX is large; same intent as Darwin pkgs-stable scheme-full.
     (texlive.combine {
       inherit (texlive)
         scheme-full
@@ -82,13 +85,12 @@ in
     })
 
     melonds
-    proton-pass
+    proton-pass-cli
     qbittorrent
     wireshark
     dive
     swi-prolog
 
-    # LibreOffice instead of macOS open -a LibreOffice aliases
     libreoffice
 
     tmux
@@ -106,6 +108,12 @@ in
 
     ".config/ghostty/config".source =
       config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/ghostty_config";
+
+    ".config/hypr/hyprland.conf".source =
+      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/hypr/hyprland.conf";
+
+    ".config/waybar".source =
+      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/waybar";
 
     ".config/tmux".source =
       config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/tmux";
@@ -131,6 +139,8 @@ in
       package = pkgs.ghostty;
     };
 
+    waybar.enable = true;
+
     fastfetch.enable = true;
     bun.enable = true;
     lazydocker.enable = true;
@@ -142,9 +152,9 @@ in
       package = pkgs.vscodium;
     };
 
-    discord = {
-      enable = true;
-    };
+    # discord = {
+    #   enable = true;
+    # };
 
     man = {
       enable = true;
@@ -340,8 +350,8 @@ in
   };
 
   home.activation.copilotBridge = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    AUTH_DB="$HOME/.config/github-copilot/auth.db"
-    HOSTS_JSON="$HOME/.config/github-copilot/hosts.json"
+    AUTH_DB="${config.home.homeDirectory}/.config/github-copilot/auth.db"
+    HOSTS_JSON="${config.home.homeDirectory}/.config/github-copilot/hosts.json"
     if [ -f "$AUTH_DB" ]; then
       TOKEN=$(${pkgs.sqlite}/bin/sqlite3 "$AUTH_DB" "SELECT cast(token_ciphertext as text) FROM oauth_tokens LIMIT 1;" 2>/dev/null)
       if [ -n "$TOKEN" ]; then
@@ -353,9 +363,9 @@ in
   '';
 
   home.activation.createRequiredDirs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    mkdir -p "$HOME/ai_memory/concepts"
-    mkdir -p "$HOME/ai_memory/journal"
-    mkdir -p "$HOME/dotfiles"
-    mkdir -p "$HOME/nixos-config"
+    mkdir -p "${config.home.homeDirectory}/ai_memory/concepts"
+    mkdir -p "${config.home.homeDirectory}/ai_memory/journal"
+    mkdir -p "${config.home.homeDirectory}/dotfiles"
+    mkdir -p "${config.home.homeDirectory}/nixos-config"
   '';
 }

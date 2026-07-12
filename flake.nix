@@ -2,7 +2,6 @@
   description = "NixOS on Apple Silicon (Asahi) — uynx";
 
   inputs = {
-    # Unstable: nixos-apple-silicon tracks this closely for kernel/firmware.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     nixos-apple-silicon = {
@@ -20,7 +19,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Same family as nix-darwin-config; NixOS module (not darwin).
     determinate.url = "https://flakehub.com/f/DeterminateSystems/determinate/*";
   };
 
@@ -36,8 +34,6 @@
     }:
     {
       nixosConfigurations = {
-        # M1 Pro MacBook Pro (MacBookPro18,3) — dual-boot ~½ SSD each.
-        # hardware-configuration.nix is generated on the machine during install.
         "uynx" = nixpkgs.lib.nixosSystem {
           system = "aarch64-linux";
           specialArgs = { inherit inputs; };
