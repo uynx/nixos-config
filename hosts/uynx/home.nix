@@ -24,8 +24,8 @@ in
     enable = true;
     gtk.enable = true;
     x11.enable = true;
-    package = pkgs.bibata-cursors;
-    name = "Bibata-Modern-Classic";
+    package = pkgs.capitaine-cursors;
+    name = "capitaine-cursors";
     size = 24;
   };
 
