@@ -31,6 +31,7 @@ in
   };
 
   home.packages = with pkgs; [
+    hyprlandPlugins.hy3
     coreutils
     wget
     dust
