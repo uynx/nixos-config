@@ -63,13 +63,6 @@
 
   nixpkgs.config.allowUnfree = true;
 
-  documentation = {
-    enable = false;
-    doc.enable = false;
-    man.enable = false;
-    info.enable = false;
-  };
-
   virtualisation.docker.enable = true;
 
   users.users.uynx = {
