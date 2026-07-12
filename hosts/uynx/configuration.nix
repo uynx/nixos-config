@@ -37,20 +37,38 @@
 
   time.timeZone = "America/Chicago";
 
+  determinate.enable = true;
+
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 7d";
+  };
+
   nix.settings = {
-    experimental-features = [
-      "nix-command"
-      "flakes"
-    ];
+    auto-optimise-store = true;
     trusted-users = [
       "root"
       "uynx"
     ];
-    # Optional later: Asahi community binary cache for kernels
-    # https://github.com/nix-community/nixos-apple-silicon/blob/main/docs/binary-cache.md
+    substituters = [
+      "https://nix-community.cachix.org"
+      "https://numtide.cachix.org"
+    ];
+    trusted-public-keys = [
+      "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+      "numtide.cachix.org-1:2ps1kLBUWnL9yCkD69XfYIa2VclDuxsBeE266mGrW0o="
+    ];
   };
 
   nixpkgs.config.allowUnfree = true;
+
+  documentation = {
+    enable = false;
+    doc.enable = false;
+    man.enable = false;
+    info.enable = false;
+  };
 
   virtualisation.docker.enable = true;
 
