@@ -30,7 +30,7 @@
   };
 
   networking = {
-    hostName = "uynx";
+    hostName = "MacBook-Pro";
     networkmanager.enable = true;
     networkmanager.wifi.backend = "iwd";
   };

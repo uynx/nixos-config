@@ -2,7 +2,7 @@
   description = "NixOS on Apple Silicon (Asahi) — uynx";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "https://flakehub.com/f/DeterminateSystems/nixpkgs-weekly/*";
 
     nixos-apple-silicon = {
       url = "github:nix-community/nixos-apple-silicon";
@@ -19,6 +19,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    nixpkgs-stable.url = "https://flakehub.com/f/DeterminateSystems/nixpkgs-26.05-chilled/*";
+
     determinate.url = "https://flakehub.com/f/DeterminateSystems/determinate/*";
   };
 
@@ -30,6 +32,7 @@
       home-manager,
       nix-index-database,
       determinate,
+      nixpkgs-stable,
       ...
     }:
     {
@@ -47,7 +50,13 @@
                 useGlobalPkgs = true;
                 useUserPackages = true;
                 backupFileExtension = "bak";
-                extraSpecialArgs = { inherit inputs; };
+                extraSpecialArgs = {
+                  inherit inputs;
+                  pkgs-stable = import nixpkgs-stable {
+                    system = "aarch64-linux";
+                    config.allowUnfree = true;
+                  };
+                };
                 sharedModules = [
                   nix-index-database.homeModules.nix-index
                 ];

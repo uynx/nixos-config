@@ -2,6 +2,7 @@
   config,
   pkgs,
   lib,
+  pkgs-stable,
   ...
 }:
 
@@ -77,12 +78,10 @@ in
     nixfmt
     statix
 
-    (texlive.combine {
-      inherit (texlive)
-        scheme-full
-        biber
-        ;
-    })
+    (pkgs-stable.texlive.withPackages (ps: with ps; [
+      scheme-full
+      biber
+    ]))
 
     melonds
     proton-pass-cli
