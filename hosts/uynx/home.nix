@@ -192,6 +192,7 @@ in
       monitor-hotplug
       workspace-switcher
       update-brave-origin
+      distrobox
     ];
     file = {
       ".config/nvim".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/nvim";
