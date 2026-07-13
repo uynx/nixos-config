@@ -11,7 +11,7 @@
   hardware = {
     asahi = {
       enable = true;
-      peripheralFirmwareDirectory = ./firmware;
+      peripheralFirmwareDirectory = /home/uynx/nixos-config/firmware;
     };
     bluetooth = {
       enable = true;
