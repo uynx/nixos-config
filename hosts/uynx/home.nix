@@ -103,12 +103,16 @@ let
         dl_url = (f"{base_url}/pool/main/b/brave-origin/"
                   f"brave-origin_{latest}_{arch}.deb")
         print(f"Hashing {arch}...")
+        nix_bin = "${pkgs.nix}/bin"
         pf = subprocess.run(
-            ["${pkgs.nix}/bin/nix-prefetch-url", dl_url],
+            [f"{nix_bin}/nix-prefetch-url", dl_url],
             capture_output=True, text=True, check=True
         )
-        cmd = ["${pkgs.nix}/bin/nix", "hash", "convert",
-               "--hash-algo", "sha256", "--to", "sri", pf.stdout.strip()]
+        cmd = [
+            f"{nix_bin}/nix", "hash", "convert",
+            "--hash-algo", "sha256", "--to", "sri",
+            pf.stdout.strip()
+        ]
         conv = subprocess.run(
             cmd, capture_output=True, text=True, check=True
         )
