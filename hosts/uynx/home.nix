@@ -71,6 +71,74 @@ let
       fi
     done
   '';
+
+  update-brave-origin = pkgs.writers.writePython3Bin "update-brave-origin" { } ''
+    import urllib.request
+    import re
+    import subprocess
+    import os
+
+    print("Checking for latest Brave Origin version...")
+    try:
+        url = "https://brave-browser-apt-release.s3.brave.com/dists/stable/main/binary-arm64/Packages"
+        with urllib.request.urlopen(url) as response:
+            content = response.read().decode('utf-8')
+        match = re.search(r"Package: brave-origin\n.*?Version: ([\d.]+)", content, re.DOTALL)
+        if not match:
+            print("Failed to find version in Packages index.")
+            exit(1)
+        latest_version = match.group(1)
+    except Exception as e:
+        print(f"Error fetching Packages index: {e}")
+        exit(1)
+
+    nix_path = os.path.expanduser("~/nixos-config/hosts/uynx/brave-origin.nix")
+    with open(nix_path, "r") as f:
+        nix_content = f.read()
+
+    current_version_match = re.search(r'version = "([\d.]+)";', nix_content)
+    if not current_version_match:
+        print("Could not find current version in brave-origin.nix.")
+        exit(1)
+    current_version = current_version_match.group(1)
+
+    print(f"Current version: {current_version}")
+    print(f"Latest version:  {latest_version}")
+
+    if current_version == latest_version:
+        print("Brave Origin is already up to date.")
+        exit(0)
+
+    print(f"Updating Brave Origin to {latest_version}...")
+
+    def get_hash(arch):
+        url = f"https://brave-browser-apt-release.s3.brave.com/pool/main/b/brave-origin/brave-origin_{latest_version}_{arch}.deb"
+        print(f"Prefetching hash for {arch}...")
+        try:
+            prefetch = subprocess.run(["${pkgs.nix}/bin/nix-prefetch-url", url], capture_output=True, text=True, check=True)
+            sha256_hash = prefetch.stdout.strip()
+            convert = subprocess.run(["${pkgs.nix}/bin/nix", "hash", "convert", "--hash-algo", "sha256", "--to", "sri", sha256_hash], capture_output=True, text=True, check=True)
+            return convert.stdout.strip()
+        except Exception as e:
+            print(f"Error calculating hash for {arch}: {e}")
+            exit(1)
+
+    arm64_hash = get_hash("arm64")
+    amd64_hash = get_hash("amd64")
+
+    new_content = nix_content
+    new_content = re.sub(r'version = "[\d.]+";', f'version = "{latest_version}";', new_content)
+    new_content = re.sub(
+        r'hash = if arch == "arm64" then "[^"]+"\s+else "[^"]+";',
+        f'hash = if arch == "arm64" then "{arm64_hash}"\n         else "{amd64_hash}";',
+        new_content
+    )
+
+    with open(nix_path, "w") as f:
+        f.write(new_content)
+
+    print(f"Successfully updated brave-origin.nix to {latest_version}!")
+  '';
 in
 {
   home = {
@@ -169,6 +237,7 @@ in
 
     monitor-hotplug
     workspace-switcher
+    update-brave-origin
   ];
 
   home.file = {
@@ -323,7 +392,7 @@ in
       };
 
       shellAliases = {
-        update = "nix flake update --flake ~/nixos-config";
+        update = "update-brave-origin && nix flake update --flake ~/nixos-config";
 
         word = "libreoffice --writer";
         powerpoint = "libreoffice --impress";
