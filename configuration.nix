@@ -1,12 +1,6 @@
+{ pkgs, ... }:
 {
-  pkgs,
-  ...
-}:
-
-{
-  imports = [
-    ./hardware-configuration.nix
-  ];
+  imports = [ ./hardware-configuration.nix ];
 
   hardware = {
     asahi = {
@@ -31,38 +25,39 @@
 
   networking = {
     hostName = "MacBook-Pro";
-    networkmanager.enable = true;
-    networkmanager.wifi.backend = "iwd";
+    networkmanager = {
+      enable = true;
+      wifi.backend = "iwd";
+    };
   };
 
   time.timeZone = "America/Chicago";
-
   determinate.enable = true;
 
-  nix.gc = {
-    automatic = true;
-    dates = "weekly";
-    options = "--delete-older-than 7d";
-  };
-
-  nix.settings = {
-    auto-optimise-store = true;
-    trusted-users = [
-      "root"
-      "uynx"
-    ];
-    substituters = [
-      "https://nix-community.cachix.org"
-      "https://numtide.cachix.org"
-    ];
-    trusted-public-keys = [
-      "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
-      "numtide.cachix.org-1:2ps1kLBUWnL9yCkD69XfYIa2VclDuxsBeE266mGrW0o="
-    ];
+  nix = {
+    gc = {
+      automatic = true;
+      dates = "weekly";
+      options = "--delete-older-than 7d";
+    };
+    settings = {
+      auto-optimise-store = true;
+      trusted-users = [
+        "root"
+        "uynx"
+      ];
+      substituters = [
+        "https://nix-community.cachix.org"
+        "https://numtide.cachix.org"
+      ];
+      trusted-public-keys = [
+        "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+        "numtide.cachix.org-1:2ps1kLBUWnL9yCkD69XfYIa2VclDuxsBeE266mGrW0o="
+      ];
+    };
   };
 
   nixpkgs.config.allowUnfree = true;
-
   virtualisation.docker.enable = true;
 
   users.users.uynx = {
@@ -77,7 +72,10 @@
     shell = pkgs.fish;
   };
 
-  programs.fish.enable = true;
+  programs = {
+    fish.enable = true;
+    hyprland.enable = true;
+  };
 
   environment.systemPackages = with pkgs; [
     git
@@ -106,26 +104,19 @@
     };
     greetd = {
       enable = true;
-      settings = {
-        default_session = {
-          command = "${pkgs.tuigreet}/bin/tuigreet --time --cmd start-hyprland";
-          user = "greeter";
-        };
+      settings.default_session = {
+        command = "${pkgs.tuigreet}/bin/tuigreet --time --cmd start-hyprland";
+        user = "greeter";
       };
     };
     gnome.gnome-keyring.enable = true;
   };
 
   security.pam.services.greetd.enableGnomeKeyring = true;
-
   fonts.packages = with pkgs; [
     nerd-fonts.hack
     julia-mono
   ];
-
-  programs.hyprland.enable = true;
-
   console.useXkbConfig = true;
-
   system.stateVersion = "25.11";
 }

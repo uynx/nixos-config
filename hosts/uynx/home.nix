@@ -7,152 +7,210 @@
 }:
 
 let
+  H = "${pkgs.hyprland}/bin/hyprctl";
+  J = "${pkgs.jq}/bin/jq";
   workspace-switcher = pkgs.writeShellScriptBin "workspace-switcher" ''
     KEY=$1
     ACTION=''${2:-goto}
-    STATE_FILE="/tmp/hyprland_merged_workspaces"
+    STATE=/tmp/hyprland_merged_workspaces
+    HDMI=$(grep -q "^connected$" /sys/class/drm/*-HDMI-A-1/status 2>/dev/null && echo 1 || echo 0)
 
-    # ponytail: check hardware status via DRM rather than compositor
-    HDMI_CONNECTED=$(grep -q "^connected$" /sys/class/drm/*-HDMI-A-1/status 2>/dev/null && echo "HDMI-A-1" || echo "")
-
-    if [ "$ACTION" = "sync" ]; then
-      if [ -z "$HDMI_CONNECTED" ]; then
-        # ponytail: single jq pass to get and merge workspaces 4,5,6 clients
-        if [ ! -f "$STATE_FILE" ]; then
-          CURRENT_WS=$(${pkgs.hyprland}/bin/hyprctl activeworkspace -j | ${pkgs.jq}/bin/jq -r '.id')
-          touch "$STATE_FILE"
-          ${pkgs.hyprland}/bin/hyprctl clients -j | ${pkgs.jq}/bin/jq -r '.[] | select(.workspace.id >= 4 and .workspace.id <= 6) | "\(.workspace.id):\(.address)"' | while IFS=: read -r ws addr; do
-            echo "$ws:$addr" >> "$STATE_FILE"
-            ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspacesilent "$((ws - 3)),address:$addr"
-          done
-          if [ "$CURRENT_WS" -ge 4 ] && [ "$CURRENT_WS" -le 6 ]; then
-            ${pkgs.hyprland}/bin/hyprctl dispatch workspace "$((CURRENT_WS - 3))"
-          fi
+    if [ "$ACTION" = sync ]; then
+      if [ "$HDMI" = 0 ]; then
+        if [ ! -f "$STATE" ]; then
+          CUR=$(${H} activeworkspace -j | ${J} -r .id)
+          : >"$STATE"
+          ${H} clients -j | ${J} -r '.[]|select(.workspace.id>=4 and .workspace.id<=6)|"\(.workspace.id):\(.address)"' |
+            while IFS=: read -r ws addr; do
+              echo "$ws:$addr" >>"$STATE"
+              ${H} dispatch movetoworkspacesilent "$((ws - 3)),address:$addr"
+            done
+          [ "$CUR" -ge 4 ] && [ "$CUR" -le 6 ] && ${H} dispatch workspace "$((CUR - 3))"
         fi
       else
-        for ws in 1 2 3; do
-          ${pkgs.hyprland}/bin/hyprctl dispatch moveworkspacetomonitor "$ws HDMI-A-1"
-        done
-        if [ -f "$STATE_FILE" ]; then
-          while IFS=: read -r orig_ws addr; do
-            ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspacesilent "$orig_ws,address:$addr"
-          done < "$STATE_FILE"
-          rm -f "$STATE_FILE"
+        for ws in 1 2 3; do ${H} dispatch moveworkspacetomonitor "$ws HDMI-A-1"; done
+        if [ -f "$STATE" ]; then
+          while IFS=: read -r o a; do ${H} dispatch movetoworkspacesilent "$o,address:$a"; done <"$STATE"
+          rm -f "$STATE"
         fi
       fi
       exit 0
     fi
 
-    # ponytail: offset base calculation rather than repeating routing cases
     BASE=1
-    if [ -n "$HDMI_CONNECTED" ]; then
-      ACTIVE=$(${pkgs.hyprland}/bin/hyprctl monitors -j | ${pkgs.jq}/bin/jq -r '.[] | select(.focused == true) | .name')
-      [ "$ACTIVE" != "HDMI-A-1" ] && BASE=4
+    if [ "$HDMI" = 1 ]; then
+      [ "$(${H} monitors -j | ${J} -r '.[]|select(.focused==true)|.name')" != HDMI-A-1 ] && BASE=4
     fi
-
     case "$KEY" in
-      u) TARGET=$BASE ;;
-      i) TARGET=$((BASE + 1)) ;;
-      o) TARGET=$((BASE + 2)) ;;
-      *) exit 1 ;;
+      u) T=$BASE ;; i) T=$((BASE + 1)) ;; o) T=$((BASE + 2)) ;; *) exit 1 ;;
     esac
-
-    [ "$ACTION" = "move" ] && DISPATCH="movetoworkspace" || DISPATCH="workspace"
-    ${pkgs.hyprland}/bin/hyprctl dispatch "$DISPATCH" "$TARGET"
+    ${H} dispatch "$([ "$ACTION" = move ] && echo movetoworkspace || echo workspace)" "$T"
   '';
 
   monitor-hotplug = pkgs.writeShellScriptBin "monitor-hotplug" ''
     ${pkgs.systemd}/bin/udevadm monitor --subsystem=drm --udev | while read -r line; do
-      if echo "$line" | grep -q "change"; then
-        sleep 1.0
-        ${workspace-switcher}/bin/workspace-switcher "" "sync"
-      fi
+      echo "$line" | grep -q change || continue
+      sleep 0.25
+      ${workspace-switcher}/bin/workspace-switcher "" sync
     done
   '';
 
   update-brave-origin = pkgs.writers.writePython3Bin "update-brave-origin" { } ''
-    import os
-    import re
-    import subprocess
-    import urllib.request
+    import os, re, subprocess, urllib.request
+    base = "https://brave-browser-apt-release.s3.brave.com"
+    idx = urllib.request.urlopen(f"{base}/dists/stable/main/binary-arm64/Packages").read().decode()
+    latest = re.search(r"Package: brave-origin\n.*?Version: ([\d.]+)", idx, re.DOTALL).group(1)
+    path = os.path.expanduser("~/nixos-config/hosts/uynx/brave-origin.nix")
+    text = open(path).read()
+    cur = re.search(r'version = "([\d.]+)";', text).group(1)
+    print(f"Current: {cur} | Latest: {latest}")
+    if cur == latest:
+        print("Already up to date."); raise SystemExit(0)
 
-    base_url = "https://brave-browser-apt-release.s3.brave.com"
-    url = f"{base_url}/dists/stable/main/binary-arm64/Packages"
-    with urllib.request.urlopen(url) as r:
-        pkg_index = r.read().decode("utf-8")
-    m = re.search(r"Package: brave-origin\n.*?Version: ([\d.]+)",
-                  pkg_index, re.DOTALL)
-    latest = m.group(1)
-
-    nix_path = os.path.expanduser(
-        "~/nixos-config/hosts/uynx/brave-origin.nix"
-    )
-    with open(nix_path) as f:
-        content = f.read()
-    current = re.search(r'version = "([\d.]+)";', content).group(1)
-
-    print(f"Current: {current} | Latest: {latest}")
-    if current == latest:
-        print("Already up to date.")
-        exit(0)
-
-
-    def get_hash(arch):
-        dl_url = (f"{base_url}/pool/main/b/brave-origin/"
-                  f"brave-origin_{latest}_{arch}.deb")
+    def h(arch):
+        url = f"{base}/pool/main/b/brave-origin/brave-origin_{latest}_{arch}.deb"
         print(f"Hashing {arch}...")
-        pf = subprocess.run(
-            ["nix-prefetch-url", dl_url],
-            capture_output=True, text=True, check=True
-        )
-        cmd = [
-            "nix", "hash", "convert",
-            "--hash-algo", "sha256", "--to", "sri",
-            pf.stdout.strip()
-        ]
-        conv = subprocess.run(
-            cmd, capture_output=True, text=True, check=True
-        )
-        return conv.stdout.strip()
+        pf = subprocess.run(["nix-prefetch-url", url], capture_output=True, text=True, check=True)
+        return subprocess.run(
+            ["nix", "hash", "convert", "--hash-algo", "sha256", "--to", "sri", pf.stdout.strip()],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
 
-
-    arm_h = get_hash("arm64")
-    amd_h = get_hash("amd64")
-
-    content = re.sub(
-        r'version = "[^"]+";', f'version = "{latest}";', content
-    )
-    content = re.sub(
+    arm, amd = h("arm64"), h("amd64")
+    text = re.sub(r'version = "[^"]+";', f'version = "{latest}";', text)
+    text = re.sub(
         r'hash = if arch == "arm64" then "[^"]+"\s+else "[^"]+";',
-        f'hash = if arch == "arm64" then "{arm_h}"\n         else "{amd_h}";',
-        content,
+        f'hash = if arch == "arm64" then "{arm}"\n         else "{amd}";',
+        text,
     )
-
-    with open(nix_path, "w") as f:
-        f.write(content)
-
+    open(path, "w").write(text)
     print("Updated brave-origin.nix successfully!")
   '';
+
+  home = "/home/uynx";
 in
 {
   home = {
     username = "uynx";
-    homeDirectory = "/home/uynx";
+    homeDirectory = home;
     stateVersion = "25.11";
     sessionVariables = {
       EDITOR = "nvim";
       VISUAL = "nvim";
       AGY_CLI_DISABLE_AUTO_UPDATE = "true";
     };
-  };
-
-  home.pointerCursor = {
-    enable = true;
-    gtk.enable = true;
-    x11.enable = true;
-    package = pkgs.capitaine-cursors;
-    name = "capitaine-cursors";
-    size = 24;
+    pointerCursor = {
+      enable = true;
+      gtk.enable = true;
+      x11.enable = true;
+      package = pkgs.capitaine-cursors;
+      name = "capitaine-cursors";
+      size = 24;
+    };
+    packages = with pkgs; [
+      hyprlandPlugins.hy3
+      hyprpaper
+      coreutils
+      wget
+      dust
+      duf
+      procs
+      sd
+      gping
+      doggo
+      obsidian
+      tokei
+      hyperfine
+      bandwhich
+      (neovim.override {
+        withNodeJs = true;
+        withPython3 = true;
+      })
+      tree-sitter
+      nodejs
+      rustc
+      (python3.withPackages (ps: with ps; [ pip setuptools ]))
+      gnumake
+      ast-grep
+      lua5_1
+      luarocks
+      julia-bin
+      php
+      php.packages.composer
+      ruby
+      uv
+      imagemagick
+      ghostscript
+      mermaid-cli
+      nil
+      nixfmt
+      statix
+      (pkgs-stable.texlive.withPackages (ps: with ps; [ scheme-full biber ]))
+      proton-vpn
+      proton-pass-cli
+      qbittorrent
+      wireshark
+      dive
+      swi-prolog
+      libreoffice
+      cava
+      socat
+      tmux
+      tmuxPlugins.sensible
+      tmuxPlugins.vim-tmux-navigator
+      tmuxPlugins.resurrect
+      tmuxPlugins.continuum
+      monitor-hotplug
+      workspace-switcher
+      update-brave-origin
+    ];
+    file = {
+      ".config/nvim".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/nvim";
+      ".local/share/nvim/site/parser/norg.so".source =
+        "${pkgs.tree-sitter-grammars.tree-sitter-norg}/parser";
+      ".config/ghostty/config".text = ''
+        config-file = ${home}/dotfiles/ghostty_config
+        font-size = 12
+      '';
+      ".config/hypr/hyprland.conf".source =
+        config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/hypr/hyprland.conf";
+      ".config/hypr/hyprpaper.conf".source =
+        config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/hypr/hyprpaper.conf";
+      ".config/fuzzel/fuzzel.ini".source =
+        config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/fuzzel/fuzzel.ini";
+      ".config/waybar".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/waybar";
+      ".config/tmux".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/tmux";
+      ".agents/skills".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/skills";
+      ".agents/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/AGENTS.md";
+      ".config/cava/config".text = ''
+        [general]
+        bars = 16
+        framerate = 60
+        [input]
+        method = pipewire
+        source = auto
+        [output]
+        method = raw
+        raw_target = /dev/stdout
+        data_format = ascii
+        ascii_max_range = 7
+      '';
+    };
+    activation.copilotBridge = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      AUTH_DB="${home}/.config/github-copilot/auth.db"
+      HOSTS_JSON="${home}/.config/github-copilot/hosts.json"
+      if [ -f "$AUTH_DB" ]; then
+        TOKEN=$(${pkgs.sqlite}/bin/sqlite3 "$AUTH_DB" "SELECT cast(token_ciphertext as text) FROM oauth_tokens LIMIT 1;" 2>/dev/null)
+        if [ -n "$TOKEN" ]; then
+          mkdir -p "$(dirname "$HOSTS_JSON")"
+          printf '{\n  "github.com": {\n    "oauth_token": "%s"\n  }\n}\n' "$TOKEN" >"$HOSTS_JSON"
+          chmod 600 "$HOSTS_JSON"
+        fi
+      fi
+    '';
+    activation.createRequiredDirs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      mkdir -p "${home}/ai_memory/concepts" "${home}/ai_memory/journal" "${home}/dotfiles" "${home}/nixos-config"
+    '';
   };
 
   gtk = {
@@ -161,138 +219,7 @@ in
     gtk4.extraConfig.gtk-application-prefer-dark-theme = true;
   };
 
-  dconf.settings = {
-    "org/gnome/desktop/interface" = {
-      color-scheme = "prefer-dark";
-    };
-  };
-
-  home.packages = with pkgs; [
-    hyprlandPlugins.hy3
-    hyprpaper
-    coreutils
-    wget
-    dust
-    duf
-    procs
-    sd
-    gping
-    doggo
-    obsidian
-    tokei
-    hyperfine
-    bandwhich
-
-    (neovim.override {
-      withNodeJs = true;
-      withPython3 = true;
-    })
-
-    tree-sitter
-    nodejs
-    rustc
-    (python3.withPackages (
-      ps: with ps; [
-        pip
-        setuptools
-      ]
-    ))
-    gnumake
-    ast-grep
-    lua5_1
-    luarocks
-    julia-bin
-    php
-    php.packages.composer
-    ruby
-    uv
-
-    imagemagick
-    ghostscript
-    mermaid-cli
-
-    nil
-    nixfmt
-    statix
-
-    (pkgs-stable.texlive.withPackages (
-      ps: with ps; [
-        scheme-full
-        biber
-      ]
-    ))
-
-    proton-vpn
-    proton-pass-cli
-    qbittorrent
-    wireshark
-    dive
-    swi-prolog
-
-    libreoffice
-    cava
-    socat
-
-    tmux
-    tmuxPlugins.sensible
-    tmuxPlugins.vim-tmux-navigator
-    tmuxPlugins.resurrect
-    tmuxPlugins.continuum
-
-    monitor-hotplug
-    workspace-switcher
-    update-brave-origin
-  ];
-
-  home.file = {
-    ".config/nvim".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/nvim";
-    ".local/share/nvim/site/parser/norg.so".source =
-      "${pkgs.tree-sitter-grammars.tree-sitter-norg}/parser";
-
-    # Shared body in ~/dotfiles/ghostty_config; font-size stays 12 on Linux.
-    ".config/ghostty/config".text = ''
-      config-file = ${config.home.homeDirectory}/dotfiles/ghostty_config
-      font-size = 12
-    '';
-
-    ".config/hypr/hyprland.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/hypr/hyprland.conf";
-
-    ".config/hypr/hyprpaper.conf".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/hypr/hyprpaper.conf";
-
-    ".config/fuzzel/fuzzel.ini".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/fuzzel/fuzzel.ini";
-
-    ".config/waybar".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/waybar";
-
-    ".config/tmux".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/tmux";
-
-    ".agents/skills".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/skills";
-
-    ".agents/AGENTS.md".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/AGENTS.md";
-
-    ".config/cava/config".text = ''
-      [general]
-      bars = 16
-      framerate = 60
-
-      [input]
-      method = pipewire
-      source = auto
-
-      [output]
-      method = raw
-      raw_target = /dev/stdout
-      data_format = ascii
-      ascii_max_range = 7
-    '';
-  };
+  dconf.settings."org/gnome/desktop/interface".color-scheme = "prefer-dark";
 
   programs = {
     gh = {
@@ -302,47 +229,36 @@ in
         editor = "nvim";
       };
     };
-
     ghostty.enable = true;
-
     waybar.enable = true;
-
     fastfetch.enable = true;
     bun.enable = true;
     lazydocker.enable = true;
     java.enable = true;
     cargo.enable = true;
-
     vscodium = {
       enable = true;
       package = pkgs.vscodium;
     };
-
     man = {
       enable = true;
       generateCaches = true;
     };
-
     zoxide = {
       enable = true;
       enableFishIntegration = true;
     };
-
     yazi = {
       enable = true;
       enableFishIntegration = true;
       shellWrapperName = "y";
-      settings = {
-        manager = {
-          show_hidden = true;
-          sort_by = "modified";
-          sort_dir_first = true;
-        };
+      settings.manager = {
+        show_hidden = true;
+        sort_by = "modified";
+        sort_dir_first = true;
       };
     };
-
     bat.enable = true;
-
     eza = {
       enable = true;
       enableFishIntegration = true;
@@ -353,62 +269,43 @@ in
         "--header"
       ];
     };
-
     btop.enable = true;
-
     fd = {
       enable = true;
       hidden = true;
     };
-
     tealdeer = {
       enable = true;
       settings.updates.auto_update = true;
     };
-
     atuin = {
       enable = true;
       enableFishIntegration = true;
     };
-
     fish = {
       enable = true;
-
       interactiveShellInit = ''
         set -g fish_greeting ""
         fish_vi_key_bindings
       '';
-
-      functions = {
-        reb = {
-          body = ''
-            set -l target "uynx"
-            if test (count $argv) -gt 0
-                set target $argv[1]
-            end
-            sudo nixos-rebuild switch --flake ~/nixos-config#$target --impure
-          '';
-        };
-      };
-
+      functions.reb.body = ''
+        set -l target "uynx"
+        if test (count $argv) -gt 0; set target $argv[1]; end
+        sudo nixos-rebuild switch --flake ~/nixos-config#$target --impure
+      '';
       shellAliases = {
         update = "update-brave-origin && nix flake update --flake ~/nixos-config";
-
         word = "libreoffice --writer";
         powerpoint = "libreoffice --impress";
-
         gen = "nix-env --list-generations";
-
         wt = "git worktree list";
         wta = "git worktree add";
         wtr = "git worktree remove";
-
         vi = "nvim";
         vim = "nvim";
         tree = "eza --tree --icons";
         ll = "eza -la --icons --group-directories-first --header --git-ignore";
       };
-
       plugins = [
         {
           name = "sudope";
@@ -416,7 +313,6 @@ in
         }
       ];
     };
-
     starship = {
       enable = true;
       enableFishIntegration = true;
@@ -425,14 +321,12 @@ in
         command_timeout = 3000;
       };
     };
-
     fzf = {
       enable = true;
       enableFishIntegration = true;
       changeDirWidget.command = "fd --type d --hidden --strip-cwd-prefix --exclude .git";
       historyWidget.command = "";
     };
-
     ripgrep = {
       enable = true;
       arguments = [
@@ -443,7 +337,6 @@ in
         "--smart-case"
       ];
     };
-
     lazygit = {
       enable = true;
       settings = {
@@ -454,18 +347,15 @@ in
         };
       };
     };
-
     chromium = {
       enable = true;
       package = pkgs.callPackage ./brave-origin.nix { };
     };
-
     jq.enable = true;
     go.enable = true;
     sioyek.enable = true;
     nix-index.enable = true;
     nix-index-database.comma.enable = true;
-
     direnv = {
       enable = true;
       package = pkgs.direnv.overrideAttrs (_: {
@@ -474,7 +364,6 @@ in
       nix-direnv.enable = true;
       enableFishIntegration = true;
     };
-
     delta = {
       enable = true;
       enableGitIntegration = true;
@@ -485,7 +374,6 @@ in
         theme = "Nord";
       };
     };
-
     git = {
       enable = true;
       settings = {
@@ -510,24 +398,4 @@ in
       };
     };
   };
-
-  home.activation.copilotBridge = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    AUTH_DB="${config.home.homeDirectory}/.config/github-copilot/auth.db"
-    HOSTS_JSON="${config.home.homeDirectory}/.config/github-copilot/hosts.json"
-    if [ -f "$AUTH_DB" ]; then
-      TOKEN=$(${pkgs.sqlite}/bin/sqlite3 "$AUTH_DB" "SELECT cast(token_ciphertext as text) FROM oauth_tokens LIMIT 1;" 2>/dev/null)
-      if [ -n "$TOKEN" ]; then
-        mkdir -p "$(dirname "$HOSTS_JSON")"
-        printf '{\n  "github.com": {\n    "oauth_token": "%s"\n  }\n}\n' "$TOKEN" > "$HOSTS_JSON"
-        chmod 600 "$HOSTS_JSON"
-      fi
-    fi
-  '';
-
-  home.activation.createRequiredDirs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    mkdir -p "${config.home.homeDirectory}/ai_memory/concepts"
-    mkdir -p "${config.home.homeDirectory}/ai_memory/journal"
-    mkdir -p "${config.home.homeDirectory}/dotfiles"
-    mkdir -p "${config.home.homeDirectory}/nixos-config"
-  '';
 }
