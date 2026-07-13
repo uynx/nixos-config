@@ -21,11 +21,15 @@ let
       if [ -z "$HDMI_CONNECTED" ]; then
         # ponytail: single jq pass to get and merge workspaces 4,5,6 clients
         if [ ! -f "$STATE_FILE" ]; then
+          CURRENT_WS=$(${pkgs.hyprland}/bin/hyprctl activeworkspace -j | ${pkgs.jq}/bin/jq -r '.id')
           touch "$STATE_FILE"
           ${pkgs.hyprland}/bin/hyprctl clients -j | ${pkgs.jq}/bin/jq -r '.[] | select(.workspace.id >= 4 and .workspace.id <= 6) | "\(.workspace.id):\(.address)"' | while IFS=: read -r ws addr; do
             echo "$ws:$addr" >> "$STATE_FILE"
             ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspacesilent "$((ws - 3)),address:$addr"
           done
+          if [ "$CURRENT_WS" -ge 4 ] && [ "$CURRENT_WS" -le 6 ]; then
+            ${pkgs.hyprland}/bin/hyprctl dispatch workspace "$((CURRENT_WS - 3))"
+          fi
         fi
       else
         for ws in 1 2 3; do
