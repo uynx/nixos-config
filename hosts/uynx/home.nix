@@ -113,7 +113,7 @@ in
   home = {
     username = "uynx";
     homeDirectory = home;
-    stateVersion = "25.11";
+    stateVersion = "26.05";
     sessionVariables = {
       EDITOR = "nvim";
       VISUAL = "nvim";
@@ -149,9 +149,13 @@ in
       tree-sitter
       nodejs
       rustc
-      (python3.withPackages (ps: with ps; [ pip setuptools ]))
+      (python3.withPackages (
+        ps: with ps; [
+          pip
+          setuptools
+        ]
+      ))
       gnumake
-      ast-grep
       lua5_1
       luarocks
       julia-bin
@@ -165,7 +169,12 @@ in
       nil
       nixfmt
       statix
-      (pkgs-stable.texlive.withPackages (ps: with ps; [ scheme-full biber ]))
+      (pkgs-stable.texlive.withPackages (
+        ps: with ps; [
+          scheme-full
+          biber
+        ]
+      ))
       proton-vpn
       proton-pass-cli
       qbittorrent
