@@ -11,7 +11,7 @@
   hardware = {
     asahi = {
       enable = true;
-      peripheralFirmwareDirectory = /home/uynx/nixos-config/firmware;
+      peripheralFirmwareDirectory = /boot/vendorfw;
     };
     bluetooth = {
       enable = true;
