@@ -44,6 +44,7 @@
 , libGL
 , libpulseaudio
 , coreutils
+, libxcb
 }:
 
 let
@@ -95,6 +96,7 @@ let
     udev
     wayland
     libpulseaudio
+    libxcb
   ];
 
   rpath = lib.makeLibraryPath deps + ":" + lib.makeSearchPathOutput "lib" "lib64" deps;
