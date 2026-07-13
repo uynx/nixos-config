@@ -11,46 +11,29 @@ let
 
   workspace-switcher = pkgs.writeShellScriptBin "workspace-switcher" ''
     KEY=$1
-    ACTION=''${2:-goto} # "goto", "move", or "sync"
+    ACTION=''${2:-goto}
     STATE_FILE="/tmp/hyprland_merged_workspaces"
 
-    # Check if HDMI-A-1 (external monitor) is connected via DRM status
-    if grep -q "^connected$" /sys/class/drm/*-HDMI-A-1/status 2>/dev/null; then
-      HDMI_CONNECTED="HDMI-A-1"
-    else
-      HDMI_CONNECTED=""
-    fi
+    # ponytail: check hardware status via DRM rather than compositor
+    HDMI_CONNECTED=$(grep -q "^connected$" /sys/class/drm/*-HDMI-A-1/status 2>/dev/null && echo "HDMI-A-1" || echo "")
 
     if [ "$ACTION" = "sync" ]; then
       if [ -z "$HDMI_CONNECTED" ]; then
-        # External monitor unplugged - explicitly move workspaces 1, 2, 3 to laptop eDP-1
-        for ws in 1 2 3; do
-          ${pkgs.hyprland}/bin/hyprctl dispatch moveworkspacetomonitor "$ws eDP-1"
-        done
-        # Merge 4, 5, 6 into 1, 2, 3
+        # ponytail: single jq pass to get and merge workspaces 4,5,6 clients
         if [ ! -f "$STATE_FILE" ]; then
           touch "$STATE_FILE"
-          for ws in 4 5 6; do
-            target_ws=$((ws - 3))
-            ${pkgs.hyprland}/bin/hyprctl clients -j | ${pkgs.jq}/bin/jq -r --arg ws "$ws" '.[] | select(.workspace.id == ($ws | tonumber)) | .address' | while read -r addr; do
-              if [ -n "$addr" ]; then
-                echo "$ws:$addr" >> "$STATE_FILE"
-                ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspacesilent "''${target_ws},address:$addr"
-              fi
-            done
+          ${pkgs.hyprland}/bin/hyprctl clients -j | ${pkgs.jq}/bin/jq -r '.[] | select(.workspace.id >= 4 and .workspace.id <= 6) | "\(.workspace.id):\(.address)"' | while IFS=: read -r ws addr; do
+            echo "$ws:$addr" >> "$STATE_FILE"
+            ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspacesilent "$((ws - 3)),address:$addr"
           done
         fi
       else
-        # External monitor plugged in - move workspaces 1, 2, 3 back to HDMI-A-1
         for ws in 1 2 3; do
           ${pkgs.hyprland}/bin/hyprctl dispatch moveworkspacetomonitor "$ws HDMI-A-1"
         done
-        # Restore 4, 5, 6
         if [ -f "$STATE_FILE" ]; then
           while IFS=: read -r orig_ws addr; do
-            if [ -n "$orig_ws" ] && [ -n "$addr" ]; then
-              ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspacesilent "''${orig_ws},address:$addr"
-            fi
+            ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspacesilent "$orig_ws,address:$addr"
           done < "$STATE_FILE"
           rm -f "$STATE_FILE"
         fi
@@ -58,51 +41,29 @@ let
       exit 0
     fi
 
-    if [ -z "$HDMI_CONNECTED" ]; then
-      # Route u/i/o to 1/2/3 in single monitor mode
-      case "$KEY" in
-        u) TARGET=1 ;;
-        i) TARGET=2 ;;
-        o) TARGET=3 ;;
-        *) exit 1 ;;
-      esac
-    else
-      # Route u/i/o dynamically based on active monitor focus in dual monitor mode
-      ACTIVE_MONITOR=$(${pkgs.hyprland}/bin/hyprctl monitors -j | ${pkgs.jq}/bin/jq -r '.[] | select(.focused == true) | .name')
-
-      if [ "$ACTIVE_MONITOR" = "HDMI-A-1" ]; then
-        case "$KEY" in
-          u) TARGET=1 ;;
-          i) TARGET=2 ;;
-          o) TARGET=3 ;;
-          *) exit 1 ;;
-        esac
-      else
-        case "$KEY" in
-          u) TARGET=4 ;;
-          i) TARGET=5 ;;
-          o) TARGET=6 ;;
-          *) exit 1 ;;
-        esac
-      fi
+    # ponytail: offset base calculation rather than repeating routing cases
+    BASE=1
+    if [ -n "$HDMI_CONNECTED" ]; then
+      ACTIVE=$(${pkgs.hyprland}/bin/hyprctl monitors -j | ${pkgs.jq}/bin/jq -r '.[] | select(.focused == true) | .name')
+      [ "$ACTIVE" != "HDMI-A-1" ] && BASE=4
     fi
 
-    # Execute Hyprland dispatch for goto/move
-    if [ "$ACTION" = "move" ]; then
-      ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspace "$TARGET"
-    else
-      ${pkgs.hyprland}/bin/hyprctl dispatch workspace "$TARGET"
-    fi
+    case "$KEY" in
+      u) TARGET=$BASE ;;
+      i) TARGET=$((BASE + 1)) ;;
+      o) TARGET=$((BASE + 2)) ;;
+      *) exit 1 ;;
+    esac
+
+    [ "$ACTION" = "move" ] && DISPATCH="movetoworkspace" || DISPATCH="workspace"
+    ${pkgs.hyprland}/bin/hyprctl dispatch "$DISPATCH" "$TARGET"
   '';
 
   monitor-hotplug = pkgs.writeShellScriptBin "monitor-hotplug" ''
-    echo "monitor-hotplug started using udevadm" >> /tmp/monitor_hotplug.log
-
     ${pkgs.systemd}/bin/udevadm monitor --subsystem=drm --udev | while read -r line; do
       if echo "$line" | grep -q "change"; then
-        echo "[$(date)] Detected DRM change via udev: $line" >> /tmp/monitor_hotplug.log
         sleep 1.0
-        ${workspace-switcher}/bin/workspace-switcher "" "sync" >> /tmp/monitor_hotplug.log 2>&1
+        ${workspace-switcher}/bin/workspace-switcher "" "sync"
       fi
     done
   '';
