@@ -99,10 +99,13 @@ let
       exit 1
     fi
 
+    echo "monitor-hotplug started" >> /tmp/monitor_hotplug.log
+
     ${pkgs.socat}/bin/socat - "UNIX-CONNECT:$SOCKET_PATH" | while read -r line; do
       if echo "$line" | grep -qE "monitor(added|removed)"; then
+        echo "[$(date)] Detected monitor change: $line" >> /tmp/monitor_hotplug.log
         sleep 0.5
-        ${workspace-switcher}/bin/workspace-switcher "" "sync"
+        ${workspace-switcher}/bin/workspace-switcher "" "sync" >> /tmp/monitor_hotplug.log 2>&1
       fi
     done
   '';
