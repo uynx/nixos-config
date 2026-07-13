@@ -102,23 +102,6 @@ in
     tmuxPlugins.resurrect
     tmuxPlugins.continuum
 
-    (pkgs.writeShellScriptBin "protonvpn-startup" ''
-      # Check if HDMI-A-1 is connected
-      HDMI_CONNECTED=$(${pkgs.hyprland}/bin/hyprctl monitors -j | ${pkgs.jq}/bin/jq -r '.[] | select(.name == "HDMI-A-1") | .name')
-
-      if [ -n "$HDMI_CONNECTED" ]; then
-        TARGET_WORKSPACE=3
-      else
-        TARGET_WORKSPACE=6
-      fi
-
-      # Dynamically apply a window rule for the next Proton VPN launch
-      ${pkgs.hyprland}/bin/hyprctl keyword windowrulev2 "workspace $TARGET_WORKSPACE, class:^(proton.vpn.app.gtk)$"
-
-      # Launch Proton VPN in the background
-      ${pkgs.proton-vpn}/bin/protonvpn-app &
-    '')
-
     (pkgs.writeShellScriptBin "workspace-switcher" ''
       KEY=$1
       ACTION=''${2:-goto} # "goto" or "move"
