@@ -95,6 +95,8 @@ in
     swi-prolog
 
     libreoffice
+    cava
+    socat
 
     tmux
     tmuxPlugins.sensible
@@ -102,58 +104,77 @@ in
     tmuxPlugins.resurrect
     tmuxPlugins.continuum
 
+    (pkgs.writeShellScriptBin "monitor-hotplug" ''
+      SOCKET_PATH="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+
+      if [ ! -S "$SOCKET_PATH" ]; then
+        echo "Hyprland socket2 not found at $SOCKET_PATH"
+        exit 1
+      fi
+
+      ${pkgs.socat}/bin/socat - "UNIX-CONNECT:$SOCKET_PATH" | while read -r line; do
+        if echo "$line" | grep -qE "monitor(added|removed)"; then
+          sleep 0.5
+          ${config.home.homeDirectory}/.nix-profile/bin/workspace-switcher "" "sync"
+        fi
+      done
+    '')
+
     (pkgs.writeShellScriptBin "workspace-switcher" ''
       KEY=$1
-      ACTION=''${2:-goto} # "goto" or "move"
+      ACTION=''${2:-goto} # "goto", "move", or "sync"
       STATE_FILE="/tmp/hyprland_merged_workspaces"
 
       # Check if HDMI-A-1 (external monitor) is connected
       HDMI_CONNECTED=$(${pkgs.hyprland}/bin/hyprctl monitors -j | ${pkgs.jq}/bin/jq -r '.[] | select(.name == "HDMI-A-1") | .name')
 
-      if [ -z "$HDMI_CONNECTED" ]; then
-        # ==========================================
-        # External monitor is UNPLUGGED (Single monitor mode)
-        # ==========================================
-        
-        # Only record and merge if we haven't already done so
-        if [ ! -f "$STATE_FILE" ]; then
-          touch "$STATE_FILE"
-          # Record window addresses in 4, 5, 6 and merge them
-          for ws in 4 5 6; do
-            target_ws=$((ws - 3)) # 4->1, 5->2, 6->3
-            ${pkgs.hyprland}/bin/hyprctl clients -j | ${pkgs.jq}/bin/jq -r --arg ws "$ws" '.[] | select(.workspace.id == ($ws | tonumber)) | .address' | while read -r addr; do
-              if [ -n "$addr" ]; then
-                echo "$ws:$addr" >> "$STATE_FILE"
-                ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspacesilent "''${target_ws},address:$addr"
-              fi
-            done
+      if [ "$ACTION" = "sync" ]; then
+        if [ -z "$HDMI_CONNECTED" ]; then
+          # External monitor unplugged - explicitly move workspaces 1, 2, 3 to laptop eDP-1
+          for ws in 1 2 3; do
+            ${pkgs.hyprland}/bin/hyprctl dispatch moveworkspacetomonitor "$ws eDP-1"
           done
+          # Merge 4, 5, 6 into 1, 2, 3
+          if [ ! -f "$STATE_FILE" ]; then
+            touch "$STATE_FILE"
+            for ws in 4 5 6; do
+              target_ws=$((ws - 3))
+              ${pkgs.hyprland}/bin/hyprctl clients -j | ${pkgs.jq}/bin/jq -r --arg ws "$ws" '.[] | select(.workspace.id == ($ws | tonumber)) | .address' | while read -r addr; do
+                if [ -n "$addr" ]; then
+                  echo "$ws:$addr" >> "$STATE_FILE"
+                  ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspacesilent "''${target_ws},address:$addr"
+                fi
+              done
+            done
+          fi
+        else
+          # External monitor plugged in - move workspaces 1, 2, 3 back to HDMI-A-1
+          for ws in 1 2 3; do
+            ${pkgs.hyprland}/bin/hyprctl dispatch moveworkspacetomonitor "$ws HDMI-A-1"
+          done
+          # Restore 4, 5, 6
+          if [ -f "$STATE_FILE" ]; then
+            while IFS=: read -r orig_ws addr; do
+              if [ -n "$orig_ws" ] && [ -n "$addr" ]; then
+                ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspacesilent "''${orig_ws},address:$addr"
+              fi
+            done < "$STATE_FILE"
+            rm -f "$STATE_FILE"
+          fi
         fi
+        exit 0
+      fi
 
-        # Route u/i/o to 1/2/3
+      if [ -z "$HDMI_CONNECTED" ]; then
+        # Route u/i/o to 1/2/3 in single monitor mode
         case "$KEY" in
           u) TARGET=1 ;;
           i) TARGET=2 ;;
           o) TARGET=3 ;;
           *) exit 1 ;;
         esac
-
       else
-        # ==========================================
-        # External monitor is CONNECTED (Dual monitor mode)
-        # ==========================================
-
-        # Restore merged windows back to 4, 5, 6 if a saved state exists
-        if [ -f "$STATE_FILE" ]; then
-          while IFS=: read -r orig_ws addr; do
-            if [ -n "$orig_ws" ] && [ -n "$addr" ]; then
-              ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspacesilent "''${orig_ws},address:$addr"
-            fi
-          done < "$STATE_FILE"
-          rm -f "$STATE_FILE"
-        fi
-
-        # Determine target workspace based on active monitor focus
+        # Route u/i/o dynamically based on active monitor focus in dual monitor mode
         ACTIVE_MONITOR=$(${pkgs.hyprland}/bin/hyprctl monitors -j | ${pkgs.jq}/bin/jq -r '.[] | select(.focused == true) | .name')
 
         if [ "$ACTIVE_MONITOR" = "HDMI-A-1" ]; then
@@ -164,7 +185,6 @@ in
             *) exit 1 ;;
           esac
         else
-          # On laptop monitor (eDP-1)
           case "$KEY" in
             u) TARGET=4 ;;
             i) TARGET=5 ;;
@@ -174,7 +194,7 @@ in
         fi
       fi
 
-      # Execute Hyprland dispatch
+      # Execute Hyprland dispatch for goto/move
       if [ "$ACTION" = "move" ]; then
         ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspace "$TARGET"
       else
@@ -212,6 +232,22 @@ in
 
     ".agents/AGENTS.md".source =
       config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/AGENTS.md";
+
+    ".config/cava/config".text = ''
+      [general]
+      bars = 16
+      framerate = 60
+
+      [input]
+      method = pipewire
+      source = auto
+
+      [output]
+      method = raw
+      raw_target = /dev/stdout
+      data_format = ascii
+      ascii_max_range = 7
+    '';
   };
 
   programs = {
