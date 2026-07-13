@@ -25,16 +25,26 @@ Asahi installer does the **safe** resize of the APFS container. Do **not** use a
 
 ## Home port vs Darwin
 
-**Kept (Linux-ok):** CLI tools, nvim/tmux/ghostty/dotfiles + agents symlinks, fish/starship/atuin/…, git/gh, vscodium, discord, brave, languages, texlive full, games/tools that are cross-platform.
+**Kept (Linux-ok):** CLI tools, nvim/tmux/ghostty/dotfiles + agents symlinks, fish/starship/atuin/…, git/gh, vscodium, discord, brave-origin (custom deb-packaged release), languages, texlive full, games/tools that are cross-platform.
 
 **Dropped (mac-only):** AeroSpace, SketchyBar, duti, Colima, Lima, `whatsapp-for-mac`, Homebrew paths, quarantine `unb`, Darwin `targets.*`.
 
-**Linux swaps:** Docker (system) instead of Colima; `pkgs.ghostty`; LibreOffice CLI aliases; `reb` → `nixos-rebuild`; home under `/home/uynx`.
+**Linux swaps:** Docker (system) instead of Colima; `pkgs.ghostty`; LibreOffice CLI aliases; `reb` → `nixos-rebuild`; home under `/home/uynx`; `brave` → custom deb-wrapped `brave-origin`.
+
+## Custom Configurations
+
+- **Brave Origin**: Managed via custom derivation in `./hosts/uynx/brave-origin.nix`. Fetches official Debian binary release, patches dynamically linked libraries (including `libxcb`), and wraps binary with `wrapGAppsHook3` to run natively on Wayland.
+- **File Structure**: `configuration.nix` and `hardware-configuration.nix` are placed in the repository root.
 
 ## Rebuild (on NixOS)
 
 ```bash
 sudo nixos-rebuild switch --flake ~/nixos-config#uynx
+```
+
+Or use the `reb` alias:
+```bash
+reb
 ```
 
 First rebuild with Determinate may need cache flags (see Determinate docs) if packages aren't cached yet.
