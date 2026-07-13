@@ -32,6 +32,7 @@ in
 
   home.packages = with pkgs; [
     hyprlandPlugins.hy3
+    hyprpaper
     coreutils
     wget
     dust
@@ -210,6 +211,12 @@ in
 
     ".config/hypr/hyprland.conf".source =
       config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/hypr/hyprland.conf";
+
+    ".config/hypr/hyprpaper.conf".source =
+      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/hypr/hyprpaper.conf";
+
+    ".config/fuzzel/fuzzel.ini".source =
+      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/fuzzel/fuzzel.ini";
 
     ".config/waybar".source =
       config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/waybar";
