@@ -86,7 +86,6 @@
     curl
     ghostty
     fuzzel
-    brave
     antigravity
     brightnessctl
   ];
