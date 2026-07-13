@@ -157,6 +157,18 @@ in
     size = 24;
   };
 
+  gtk = {
+    enable = true;
+    gtk3.extraConfig.gtk-application-prefer-dark-theme = true;
+    gtk4.extraConfig.gtk-application-prefer-dark-theme = true;
+  };
+
+  dconf.settings = {
+    "org/gnome/desktop/interface" = {
+      color-scheme = "prefer-dark";
+    };
+  };
+
   home.packages = with pkgs; [
     hyprlandPlugins.hy3
     hyprpaper
