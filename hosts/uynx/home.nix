@@ -7,8 +7,6 @@
 }:
 
 let
-  gitKey = "~/.ssh/id_ed25519.pub";
-
   workspace-switcher = pkgs.writeShellScriptBin "workspace-switcher" ''
     KEY=$1
     ACTION=''${2:-goto}
@@ -186,10 +184,8 @@ in
     bandwhich
 
     (neovim.override {
-      withPerl = true;
       withNodeJs = true;
       withPython3 = true;
-      withRuby = true;
     })
 
     tree-sitter
@@ -304,10 +300,7 @@ in
       };
     };
 
-    ghostty = {
-      enable = true;
-      package = pkgs.ghostty;
-    };
+    ghostty.enable = true;
 
     waybar.enable = true;
 
@@ -321,10 +314,6 @@ in
       enable = true;
       package = pkgs.vscodium;
     };
-
-    # discord = {
-    #   enable = true;
-    # };
 
     man = {
       enable = true;
@@ -500,7 +489,7 @@ in
         user = {
           name = "Brandon Alexander";
           email = "brandonwalex@pm.me";
-          signingkey = gitKey;
+          signingkey = "~/.ssh/id_ed25519.pub";
         };
         init.defaultBranch = "main";
         pull.rebase = true;
