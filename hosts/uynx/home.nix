@@ -79,12 +79,14 @@ in
     nixfmt
     statix
 
-    (pkgs-stable.texlive.withPackages (ps: with ps; [
-      scheme-full
-      biber
-    ]))
+    (pkgs-stable.texlive.withPackages (
+      ps: with ps; [
+        scheme-full
+        biber
+      ]
+    ))
 
-    melonds
+    proton-vpn
     proton-pass-cli
     qbittorrent
     wireshark
@@ -295,7 +297,7 @@ in
 
     chromium = {
       enable = true;
-      package = pkgs.callPackage ./brave-origin.nix {};
+      package = pkgs.callPackage ./brave-origin.nix { };
     };
 
     jq.enable = true;

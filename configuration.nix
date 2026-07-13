@@ -92,7 +92,13 @@
 
   services = {
     blueman.enable = true;
-    xserver.enable = true;
+    xserver = {
+      enable = true;
+      xkb = {
+        layout = "us";
+        options = "caps:escape";
+      };
+    };
     pipewire = {
       enable = true;
       alsa.enable = true;
@@ -118,6 +124,8 @@
   ];
 
   programs.hyprland.enable = true;
+
+  console.useXkbConfig = true;
 
   system.stateVersion = "25.11";
 }
