@@ -250,8 +250,11 @@ in
     ".local/share/nvim/site/parser/norg.so".source =
       "${pkgs.tree-sitter-grammars.tree-sitter-norg}/parser";
 
-    ".config/ghostty/config".source =
-      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/ghostty_config";
+    # Shared body in ~/dotfiles/ghostty_config; font-size stays 12 on Linux.
+    ".config/ghostty/config".text = ''
+      config-file = ${config.home.homeDirectory}/dotfiles/ghostty_config
+      font-size = 12
+    '';
 
     ".config/hypr/hyprland.conf".source =
       config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/dotfiles/hypr/hyprland.conf";
