@@ -72,7 +72,8 @@ let
     done
   '';
 
-  update-brave-origin = pkgs.writers.writePython3Bin "update-brave-origin" { } ''
+  update-brave-origin = pkgs.writeShellScriptBin "update-brave-origin" ''
+    ${pkgs.python3}/bin/python3 << 'EOF'
     import urllib.request
     import re
     import subprocess
@@ -138,6 +139,7 @@ let
         f.write(new_content)
 
     print(f"Successfully updated brave-origin.nix to {latest_version}!")
+EOF
   '';
 in
 {
