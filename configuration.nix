@@ -73,6 +73,7 @@
       "video"
       "audio"
       "docker"
+      "kvm"
     ];
     shell = pkgs.fish;
   };
@@ -91,10 +92,14 @@
     fuzzel
     antigravity
     brightnessctl
+    muvm
   ];
 
   services = {
     blueman.enable = true;
+    udev.extraRules = ''
+      KERNEL=="kvm", GROUP="kvm", MODE="0660"
+    '';
     xserver = {
       enable = true;
       xkb = {
