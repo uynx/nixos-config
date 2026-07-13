@@ -11,7 +11,7 @@
   hardware = {
     asahi = {
       enable = true;
-      peripheralFirmwareDirectory = ../../firmware;
+      peripheralFirmwareDirectory = ./firmware;
     };
     bluetooth = {
       enable = true;

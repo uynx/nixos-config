@@ -43,7 +43,7 @@
           modules = [
             determinate.nixosModules.default
             nixos-apple-silicon.nixosModules.apple-silicon-support
-            ./hosts/uynx/configuration.nix
+            ./configuration.nix
             home-manager.nixosModules.home-manager
             {
               home-manager = {
