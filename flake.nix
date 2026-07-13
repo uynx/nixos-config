@@ -1,5 +1,5 @@
 {
-  description = "NixOS on Apple Silicon (Asahi) — uynx";
+  description = "My Asahi NixOS configuration";
 
   inputs = {
     nixpkgs.url = "https://flakehub.com/f/DeterminateSystems/nixpkgs-weekly/*";
@@ -41,9 +41,9 @@
           system = "aarch64-linux";
           specialArgs = { inherit inputs; };
           modules = [
+            ./configuration.nix
             determinate.nixosModules.default
             nixos-apple-silicon.nixosModules.apple-silicon-support
-            ./configuration.nix
             home-manager.nixosModules.home-manager
             {
               home-manager = {

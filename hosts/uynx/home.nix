@@ -100,6 +100,103 @@ in
     tmuxPlugins.vim-tmux-navigator
     tmuxPlugins.resurrect
     tmuxPlugins.continuum
+
+    (pkgs.writeShellScriptBin "protonvpn-startup" ''
+      # Check if HDMI-A-1 is connected
+      HDMI_CONNECTED=$(${pkgs.hyprland}/bin/hyprctl monitors -j | ${pkgs.jq}/bin/jq -r '.[] | select(.name == "HDMI-A-1") | .name')
+
+      if [ -n "$HDMI_CONNECTED" ]; then
+        TARGET_WORKSPACE=3
+      else
+        TARGET_WORKSPACE=6
+      fi
+
+      # Dynamically apply a window rule for the next Proton VPN launch
+      ${pkgs.hyprland}/bin/hyprctl keyword windowrulev2 "workspace $TARGET_WORKSPACE, class:^(proton.vpn.app.gtk)$"
+
+      # Launch Proton VPN in the background
+      ${pkgs.proton-vpn}/bin/protonvpn-app &
+    '')
+
+    (pkgs.writeShellScriptBin "workspace-switcher" ''
+      KEY=$1
+      ACTION=''${2:-goto} # "goto" or "move"
+      STATE_FILE="/tmp/hyprland_merged_workspaces"
+
+      # Check if HDMI-A-1 (external monitor) is connected
+      HDMI_CONNECTED=$(${pkgs.hyprland}/bin/hyprctl monitors -j | ${pkgs.jq}/bin/jq -r '.[] | select(.name == "HDMI-A-1") | .name')
+
+      if [ -z "$HDMI_CONNECTED" ]; then
+        # ==========================================
+        # External monitor is UNPLUGGED (Single monitor mode)
+        # ==========================================
+        
+        # Only record and merge if we haven't already done so
+        if [ ! -f "$STATE_FILE" ]; then
+          touch "$STATE_FILE"
+          # Record window addresses in 4, 5, 6 and merge them
+          for ws in 4 5 6; do
+            target_ws=$((ws - 3)) # 4->1, 5->2, 6->3
+            ${pkgs.hyprland}/bin/hyprctl clients -j | ${pkgs.jq}/bin/jq -r --arg ws "$ws" '.[] | select(.workspace.id == ($ws | tonumber)) | .address' | while read -r addr; do
+              if [ -n "$addr" ]; then
+                echo "$ws:$addr" >> "$STATE_FILE"
+                ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspacesilent "''${target_ws},address:$addr"
+              fi
+            done
+          done
+        fi
+
+        # Route u/i/o to 1/2/3
+        case "$KEY" in
+          u) TARGET=1 ;;
+          i) TARGET=2 ;;
+          o) TARGET=3 ;;
+          *) exit 1 ;;
+        esac
+
+      else
+        # ==========================================
+        # External monitor is CONNECTED (Dual monitor mode)
+        # ==========================================
+
+        # Restore merged windows back to 4, 5, 6 if a saved state exists
+        if [ -f "$STATE_FILE" ]; then
+          while IFS=: read -r orig_ws addr; do
+            if [ -n "$orig_ws" ] && [ -n "$addr" ]; then
+              ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspacesilent "''${orig_ws},address:$addr"
+            fi
+          done < "$STATE_FILE"
+          rm -f "$STATE_FILE"
+        fi
+
+        # Determine target workspace based on active monitor focus
+        ACTIVE_MONITOR=$(${pkgs.hyprland}/bin/hyprctl monitors -j | ${pkgs.jq}/bin/jq -r '.[] | select(.focused == true) | .name')
+
+        if [ "$ACTIVE_MONITOR" = "HDMI-A-1" ]; then
+          case "$KEY" in
+            u) TARGET=1 ;;
+            i) TARGET=2 ;;
+            o) TARGET=3 ;;
+            *) exit 1 ;;
+          esac
+        else
+          # On laptop monitor (eDP-1)
+          case "$KEY" in
+            u) TARGET=4 ;;
+            i) TARGET=5 ;;
+            o) TARGET=6 ;;
+            *) exit 1 ;;
+          esac
+        fi
+      fi
+
+      # Execute Hyprland dispatch
+      if [ "$ACTION" = "move" ]; then
+        ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspace "$TARGET"
+      else
+        ${pkgs.hyprland}/bin/hyprctl dispatch workspace "$TARGET"
+      fi
+    '')
   ];
 
   home.file = {

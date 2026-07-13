@@ -21,7 +21,7 @@
 
   boot = {
     loader = {
-      systemd-boot.enable = false;
+      systemd-boot.enable = true;
       efi.canTouchEfiVariables = false;
     };
     extraModprobeConfig = ''
