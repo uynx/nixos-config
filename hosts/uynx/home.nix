@@ -56,25 +56,45 @@ let
   '';
 
   update-brave-origin = pkgs.writers.writePython3Bin "update-brave-origin" { } ''
-    import os, re, subprocess, urllib.request
+    import os
+    import re
+    import subprocess
+    import urllib.request
+
     base = "https://brave-browser-apt-release.s3.brave.com"
-    idx = urllib.request.urlopen(f"{base}/dists/stable/main/binary-arm64/Packages").read().decode()
-    latest = re.search(r"Package: brave-origin\n.*?Version: ([\d.]+)", idx, re.DOTALL).group(1)
+    url = f"{base}/dists/stable/main/binary-arm64/Packages"
+    idx = urllib.request.urlopen(url).read().decode()
+    pat = r"Package: brave-origin\n.*?Version: ([\d.]+)"
+    latest = re.search(pat, idx, re.DOTALL).group(1)
     path = os.path.expanduser("~/nixos-config/hosts/uynx/brave-origin.nix")
     text = open(path).read()
     cur = re.search(r'version = "([\d.]+)";', text).group(1)
     print(f"Current: {cur} | Latest: {latest}")
     if cur == latest:
-        print("Already up to date."); raise SystemExit(0)
+        print("Already up to date.")
+        raise SystemExit(0)
+
 
     def h(arch):
-        url = f"{base}/pool/main/b/brave-origin/brave-origin_{latest}_{arch}.deb"
+        url = (
+            f"{base}/pool/main/b/brave-origin/"
+            f"brave-origin_{latest}_{arch}.deb"
+        )
         print(f"Hashing {arch}...")
-        pf = subprocess.run(["nix-prefetch-url", url], capture_output=True, text=True, check=True)
+        cmd = ["nix-prefetch-url", url]
+        pf = subprocess.run(
+            cmd, capture_output=True, text=True, check=True
+        )
+        cmd_convert = [
+            "nix", "hash", "convert",
+            "--hash-algo", "sha256",
+            "--to", "sri",
+            pf.stdout.strip()
+        ]
         return subprocess.run(
-            ["nix", "hash", "convert", "--hash-algo", "sha256", "--to", "sri", pf.stdout.strip()],
-            capture_output=True, text=True, check=True,
+            cmd_convert, capture_output=True, text=True, check=True
         ).stdout.strip()
+
 
     arm, amd = h("arm64"), h("amd64")
     text = re.sub(r'version = "[^"]+";', f'version = "{latest}";', text)
