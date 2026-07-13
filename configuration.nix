@@ -26,6 +26,12 @@
     extraModprobeConfig = ''
       options hid_apple iso_layout=0
     '';
+    binfmt.registrations.x86_64-linux = {
+      recognitionType = "magic";
+      magicOrExtension = ''\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x3e\x00'';
+      mask = ''\xff\xff\xff\xff\xff\xfe\xfe\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff'';
+      interpreter = "/run/current-system/sw/bin/muvm-fex-wrapper";
+    };
   };
 
   networking = {
@@ -93,6 +99,9 @@
     antigravity
     brightnessctl
     muvm
+    (writeShellScriptBin "muvm-fex-wrapper" ''
+      exec muvm -f /home/uynx/.local/share/fex-emu/RootFS/Ubuntu_24_04.ero -- "$@"
+    '')
   ];
 
   services = {
