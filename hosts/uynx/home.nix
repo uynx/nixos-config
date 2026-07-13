@@ -72,74 +72,65 @@ let
     done
   '';
 
-  update-brave-origin = pkgs.writeShellScriptBin "update-brave-origin" ''
-    ${pkgs.python3}/bin/python3 << 'EOF'
-    import urllib.request
+  update-brave-origin = pkgs.writers.writePython3Bin "update-brave-origin" { } ''
+    import os
     import re
     import subprocess
-    import os
+    import urllib.request
 
-    print("Checking for latest Brave Origin version...")
-    try:
-        url = "https://brave-browser-apt-release.s3.brave.com/dists/stable/main/binary-arm64/Packages"
-        with urllib.request.urlopen(url) as response:
-            content = response.read().decode('utf-8')
-        match = re.search(r"Package: brave-origin\n.*?Version: ([\d.]+)", content, re.DOTALL)
-        if not match:
-            print("Failed to find version in Packages index.")
-            exit(1)
-        latest_version = match.group(1)
-    except Exception as e:
-        print(f"Error fetching Packages index: {e}")
-        exit(1)
+    base_url = "https://brave-browser-apt-release.s3.brave.com"
+    url = f"{base_url}/dists/stable/main/binary-arm64/Packages"
+    with urllib.request.urlopen(url) as r:
+        pkg_index = r.read().decode("utf-8")
+    m = re.search(r"Package: brave-origin\n.*?Version: ([\d.]+)",
+                  pkg_index, re.DOTALL)
+    latest = m.group(1)
 
-    nix_path = os.path.expanduser("~/nixos-config/hosts/uynx/brave-origin.nix")
-    with open(nix_path, "r") as f:
-        nix_content = f.read()
+    nix_path = os.path.expanduser(
+        "~/nixos-config/hosts/uynx/brave-origin.nix"
+    )
+    with open(nix_path) as f:
+        content = f.read()
+    current = re.search(r'version = "([\d.]+)";', content).group(1)
 
-    current_version_match = re.search(r'version = "([\d.]+)";', nix_content)
-    if not current_version_match:
-        print("Could not find current version in brave-origin.nix.")
-        exit(1)
-    current_version = current_version_match.group(1)
-
-    print(f"Current version: {current_version}")
-    print(f"Latest version:  {latest_version}")
-
-    if current_version == latest_version:
-        print("Brave Origin is already up to date.")
+    print(f"Current: {current} | Latest: {latest}")
+    if current == latest:
+        print("Already up to date.")
         exit(0)
 
-    print(f"Updating Brave Origin to {latest_version}...")
 
     def get_hash(arch):
-        url = f"https://brave-browser-apt-release.s3.brave.com/pool/main/b/brave-origin/brave-origin_{latest_version}_{arch}.deb"
-        print(f"Prefetching hash for {arch}...")
-        try:
-            prefetch = subprocess.run(["${pkgs.nix}/bin/nix-prefetch-url", url], capture_output=True, text=True, check=True)
-            sha256_hash = prefetch.stdout.strip()
-            convert = subprocess.run(["${pkgs.nix}/bin/nix", "hash", "convert", "--hash-algo", "sha256", "--to", "sri", sha256_hash], capture_output=True, text=True, check=True)
-            return convert.stdout.strip()
-        except Exception as e:
-            print(f"Error calculating hash for {arch}: {e}")
-            exit(1)
+        dl_url = (f"{base_url}/pool/main/b/brave-origin/"
+                  f"brave-origin_{latest}_{arch}.deb")
+        print(f"Hashing {arch}...")
+        pf = subprocess.run(
+            ["${pkgs.nix}/bin/nix-prefetch-url", dl_url],
+            capture_output=True, text=True, check=True
+        )
+        cmd = ["${pkgs.nix}/bin/nix", "hash", "convert",
+               "--hash-algo", "sha256", "--to", "sri", pf.stdout.strip()]
+        conv = subprocess.run(
+            cmd, capture_output=True, text=True, check=True
+        )
+        return conv.stdout.strip()
 
-    arm64_hash = get_hash("arm64")
-    amd64_hash = get_hash("amd64")
 
-    new_content = nix_content
-    new_content = re.sub(r'version = "[\d.]+";', f'version = "{latest_version}";', new_content)
-    new_content = re.sub(
+    arm_h = get_hash("arm64")
+    amd_h = get_hash("amd64")
+
+    content = re.sub(
+        r'version = "[^"]+";', f'version = "{latest}";', content
+    )
+    content = re.sub(
         r'hash = if arch == "arm64" then "[^"]+"\s+else "[^"]+";',
-        f'hash = if arch == "arm64" then "{arm64_hash}"\n         else "{amd64_hash}";',
-        new_content
+        f'hash = if arch == "arm64" then "{arm_h}"\n         else "{amd_h}";',
+        content,
     )
 
     with open(nix_path, "w") as f:
-        f.write(new_content)
+        f.write(content)
 
-    print(f"Successfully updated brave-origin.nix to {latest_version}!")
-EOF
+    print("Updated brave-origin.nix successfully!")
   '';
 in
 {
