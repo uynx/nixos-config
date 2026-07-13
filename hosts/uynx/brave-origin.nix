@@ -53,8 +53,8 @@ let
          else if stdenv.hostPlatform.system == "x86_64-linux" then "amd64"
          else throw "Unsupported platform: ${stdenv.hostPlatform.system}";
 
-  hash = if arch == "arm64" then "sha256-aQlaoSy7wwia/yPugWNutfQeQfUNwX6CefgJTgELJQA="
-         else "sha256-DOsawJvPWGDTNXk5uDv9/ze8Clraillvn2Y8iaJNoU0=";
+  hash = if arch == "arm64" then "sha256-aQlW45dnpANEyOTlL1tDcC5B9RDcHOuFtqQAV7LhZQA="
+         else "sha256-DOsawJvPWGDRNXk5uDvx/zd8ChraipXnQS+fhjyJok0=";
 
   deps = [
     alsa-lib
