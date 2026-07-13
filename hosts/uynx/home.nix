@@ -295,7 +295,7 @@ in
 
     chromium = {
       enable = true;
-      package = pkgs.brave;
+      package = pkgs.callPackage ./brave-origin.nix {};
     };
 
     jq.enable = true;
