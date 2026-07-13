@@ -14,8 +14,12 @@ let
     ACTION=''${2:-goto} # "goto", "move", or "sync"
     STATE_FILE="/tmp/hyprland_merged_workspaces"
 
-    # Check if HDMI-A-1 (external monitor) is connected
-    HDMI_CONNECTED=$(${pkgs.hyprland}/bin/hyprctl monitors -j | ${pkgs.jq}/bin/jq -r '.[] | select(.name == "HDMI-A-1") | .name')
+    # Check if HDMI-A-1 (external monitor) is connected via DRM status
+    if grep -q "^connected$" /sys/class/drm/*-HDMI-A-1/status 2>/dev/null; then
+      HDMI_CONNECTED="HDMI-A-1"
+    else
+      HDMI_CONNECTED=""
+    fi
 
     if [ "$ACTION" = "sync" ]; then
       if [ -z "$HDMI_CONNECTED" ]; then
@@ -92,19 +96,12 @@ let
   '';
 
   monitor-hotplug = pkgs.writeShellScriptBin "monitor-hotplug" ''
-    SOCKET_PATH="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+    echo "monitor-hotplug started using udevadm" >> /tmp/monitor_hotplug.log
 
-    if [ ! -S "$SOCKET_PATH" ]; then
-      echo "Hyprland socket2 not found at $SOCKET_PATH"
-      exit 1
-    fi
-
-    echo "monitor-hotplug started" >> /tmp/monitor_hotplug.log
-
-    ${pkgs.socat}/bin/socat - "UNIX-CONNECT:$SOCKET_PATH" | while read -r line; do
-      if echo "$line" | grep -qE "monitor(added|removed)"; then
-        echo "[$(date)] Detected monitor change: $line" >> /tmp/monitor_hotplug.log
-        sleep 0.5
+    ${pkgs.systemd}/bin/udevadm monitor --subsystem=drm --udev | while read -r line; do
+      if echo "$line" | grep -q "change"; then
+        echo "[$(date)] Detected DRM change via udev: $line" >> /tmp/monitor_hotplug.log
+        sleep 1.0
         ${workspace-switcher}/bin/workspace-switcher "" "sync" >> /tmp/monitor_hotplug.log 2>&1
       fi
     done
