@@ -73,6 +73,7 @@
       "video"
       "audio"
       "docker"
+      "kvm"
     ];
     shell = pkgs.fish;
   };

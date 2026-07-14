@@ -118,6 +118,7 @@ in
       EDITOR = "nvim";
       VISUAL = "nvim";
       AGY_CLI_DISABLE_AUTO_UPDATE = "true";
+      DBX_CONTAINER_MANAGER = "docker";
     };
     pointerCursor = {
       enable = true;
@@ -180,6 +181,9 @@ in
       qbittorrent
       wireshark
       dive
+      distrobox
+      mesa-demos
+      vulkan-tools
       swi-prolog
       libreoffice
       cava
@@ -238,7 +242,12 @@ in
       fi
     '';
     activation.createRequiredDirs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      mkdir -p "${home}/ai_memory/concepts" "${home}/ai_memory/journal" "${home}/dotfiles" "${home}/nixos-config"
+      mkdir -p \
+        "${home}/ai_memory/concepts" \
+        "${home}/ai_memory/journal" \
+        "${home}/dotfiles" \
+        "${home}/nixos-config" \
+        "${home}/.local/share/steam-asahi/home"
     '';
   };
 
