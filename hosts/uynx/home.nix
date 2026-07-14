@@ -60,7 +60,7 @@ let
     
     # Run dynamic resolution updater in background
     ${pkgs.python3}/bin/python3 -c '
-import glob, re, json, subprocess, time
+import glob, re, json, subprocess, time, os
 def get_res():
     try:
         monitors = json.loads(subprocess.check_output(["${H}", "monitors", "-j"]))
@@ -91,9 +91,10 @@ def patch_reg(path, res):
                 f.write(text)
     except Exception:
         pass
+compatdata = os.environ.get("COMPATDATA", "/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata")
 while True:
     res = get_res()
-    for path in glob.glob("''$COMPATDATA/*/pfx/user.reg"):
+    for path in glob.glob(compatdata + "/*/pfx/user.reg"):
         patch_reg(path, res)
     time.sleep(2)
 ' &
