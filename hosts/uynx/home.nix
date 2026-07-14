@@ -325,6 +325,12 @@ in
         if test (count $argv) -gt 0; set target $argv[1]; end
         sudo nixos-rebuild switch --flake ~/nixos-config#$target --impure
       '';
+      functions.pass-find.body = ''
+        pass-cli item list Personal | fzf --ansi --header="Select an item to view credentials" | string replace -r '^-\s+\[(.*?)\]:.*$' '$1' | read -l id
+        if test -n "$id"
+            pass-cli item view --item-id $id
+        end
+      '';
       shellAliases = {
         update = "update-brave-origin && nix flake update --flake ~/nixos-config";
         word = "libreoffice --writer";
@@ -337,6 +343,7 @@ in
         vim = "nvim";
         tree = "eza --tree --icons";
         ll = "eza -la --icons --group-directories-first --header --git-ignore";
+        pf = "pass-find";
       };
       plugins = [
         {
