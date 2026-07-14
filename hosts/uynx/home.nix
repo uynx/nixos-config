@@ -58,13 +58,50 @@ let
   # Shared helper: patch Wine VD resolution for any game prefix, then launch
   steam-launch = pkgs.writeShellScriptBin "steam-launch" ''
     APP_ID=$1
-    RESOLUTION=$(${H} monitors -j | ${J} -r 'if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end | "\(.width / .scale | floor)x\(.height / .scale | floor)"')
+    RESOLUTION=$(${H} monitors -j 2>/dev/null | ${J} -r '
+      (if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end) as $m
+      | (($m.reserved // [0, 0, 0, 0]) as $r
+        | "\(((($m.width / $m.scale) - $r[0] - $r[2] - 12) | floor))x\(((($m.height / $m.scale) - $r[1] - $r[3] - 12) | floor))")
+    ' 2>/dev/null) || RESOLUTION=1920x1080
+    case "$RESOLUTION" in
+      *x[0-9]*) ;;
+      *) RESOLUTION=1920x1080 ;;
+    esac
+    WIDTH=''${RESOLUTION%x*}
+    HEIGHT=''${RESOLUTION#*x}
     COMPAT="/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata"
-    for REG_FILE in "$COMPAT"/*/pfx/user.reg; do
-      [ -f "$REG_FILE" ] || continue
-      sed -i -E "s/\"Default\"=\"[0-9]+x[0-9]+\"/\"Default\"=\"''$RESOLUTION\"/g" "$REG_FILE"
-      sed -i -E "s/\"([A-Za-z0-9_]+)\"=\"[0-9]+x[0-9]+\"/\"\\1\"=\"''$RESOLUTION\"/g" "$COMPAT/''${APP_ID}/pfx/user.reg" 2>/dev/null || true
-    done
+    PREFIX="$COMPAT/''${APP_ID}/pfx"
+    REG_FILE="$PREFIX/user.reg"
+    if [ -f "$REG_FILE" ]; then
+      STAMP=$(date +%s)
+      if ! grep -Fq '[Software\\Wine\\Explorer]' "$REG_FILE"; then
+        printf '\n[Software\\Wine\\Explorer] %s\n#time=%s\n"Desktop"="Default"\n' \
+          "$STAMP" "$STAMP" >>"$REG_FILE"
+      fi
+      if grep -Fq '[Software\\Wine\\Explorer\\Desktops]' "$REG_FILE"; then
+        sed -i -E \
+          -e "s/\"Default\"=\"[0-9]+x[0-9]+\"/\"Default\"=\"''$RESOLUTION\"/g" \
+          -e "s/\"Peggle\"=\"[0-9]+x[0-9]+\"/\"Peggle\"=\"''$RESOLUTION\"/g" \
+          "$REG_FILE"
+      else
+        printf '\n[Software\\Wine\\Explorer\\Desktops] %s\n#time=%s\n"Default"="%s"\n"Peggle"="%s"\n' \
+          "$STAMP" "$STAMP" "$RESOLUTION" "$RESOLUTION" >>"$REG_FILE"
+      fi
+    fi
+
+    PC_CONFIG=$(find "$PREFIX/drive_c/users/steamuser/AppData/Local" \
+      -type f -name pcconfig.txt -print -quit 2>/dev/null || true)
+    if [ -f "$PC_CONFIG" ]; then
+      sed -i -E \
+        -e "s/^ScreenWidth[[:space:]]+[0-9]+/ScreenWidth            ''$WIDTH/" \
+        -e "s/^ScreenHeight[[:space:]]+[0-9]+/ScreenHeight           ''$HEIGHT/" \
+        -e "s/^WindowWidth[[:space:]]+[0-9]+/WindowWidth            ''$WIDTH/" \
+        -e "s/^WindowHeight[[:space:]]+[0-9]+/WindowHeight           ''$HEIGHT/" \
+        -e "s/^WindowLeft[[:space:]]+[0-9]+/WindowLeft             0/" \
+        -e "s/^WindowTop[[:space:]]+[0-9]+/WindowTop              0/" \
+        "$PC_CONFIG"
+    fi
+
     exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- \
       env FEX_X87REDUCEDPRECISION=1 \
       steam -silent -applaunch "''$APP_ID"
