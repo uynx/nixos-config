@@ -264,6 +264,25 @@ in
 
   dconf.settings."org/gnome/desktop/interface".color-scheme = "prefer-dark";
 
+  xdg.desktopEntries = {
+    peggle = {
+      name = "Peggle";
+      genericName = "Game";
+      exec = "peggle";
+      icon = "steam";
+      terminal = false;
+      categories = [ "Game" ];
+    };
+    steam = {
+      name = "Steam";
+      genericName = "Games Store";
+      exec = "${pkgs.distrobox}/bin/distrobox enter steam-asahi -- steam";
+      icon = "steam";
+      terminal = false;
+      categories = [ "Network" "FileTransfer" "Game" ];
+    };
+  };
+
   programs = {
     gh = {
       enable = true;
