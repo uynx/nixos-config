@@ -55,27 +55,72 @@ let
     done
   '';
 
-  peggle = pkgs.writeShellScriptBin "peggle" ''
-    REG_FILE="/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata/3540/pfx/user.reg"
-    RESOLUTION=$(${H} monitors -j | ${J} -r 'if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end | "\(((.width / .scale) - .reserved[0] - .reserved[2] - 12) | floor)x\(((.height / .scale) - .reserved[1] - .reserved[3] - 12) | floor)"')
-    if [ -f "$REG_FILE" ]; then
+  # Shared helper: patch Wine VD resolution for any game prefix, then launch
+  steam-launch = pkgs.writeShellScriptBin "steam-launch" ''
+    APP_ID=$1
+    RESOLUTION=$(${H} monitors -j | ${J} -r 'if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end | "\(.width / .scale | floor)x\(.height / .scale | floor)"')
+    COMPAT="/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata"
+    for REG_FILE in "$COMPAT"/*/pfx/user.reg; do
+      [ -f "$REG_FILE" ] || continue
       sed -i -E "s/\"Default\"=\"[0-9]+x[0-9]+\"/\"Default\"=\"''$RESOLUTION\"/g" "$REG_FILE"
-      sed -i -E "s/\"Peggle\"=\"[0-9]+x[0-9]+\"/\"Peggle\"=\"''$RESOLUTION\"/g" "$REG_FILE"
-    fi
+      sed -i -E "s/\"([A-Za-z0-9_]+)\"=\"[0-9]+x[0-9]+\"/\"\\1\"=\"''$RESOLUTION\"/g" "$COMPAT/''${APP_ID}/pfx/user.reg" 2>/dev/null || true
+    done
     exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- \
       env FEX_X87REDUCEDPRECISION=1 \
-      steam -silent -applaunch 3540
+      steam -silent -applaunch "''$APP_ID"
   '';
 
-  steam = pkgs.writeShellScriptBin "steam" ''
-    RESOLUTION=$(${H} monitors -j | ${J} -r 'if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end | "\(((.width / .scale) - .reserved[0] - .reserved[2] - 12) | floor)x\(((.height / .scale) - .reserved[1] - .reserved[3] - 12) | floor)"')
-    for reg in /home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata/*/pfx/user.reg; do
-      if [ -f "$reg" ]; then
-        sed -i -E "s/\"Default\"=\"[0-9]+x[0-9]+\"/\"Default\"=\"''$RESOLUTION\"/g" "$reg"
-        sed -i -E "s/\"Peggle\"=\"[0-9]+x[0-9]+\"/\"Peggle\"=\"''$RESOLUTION\"/g" "$reg"
-      fi
-    done
-    exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- steam "$@"
+  steam-game-entries = pkgs.writeShellScriptBin "steam-game-entries" ''
+    set -eu
+
+    STEAM_ROOT=/home/uynx/.local/share/steam-asahi/home/.local/share/Steam
+    APPLICATIONS="''${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+    MANIFESTS=$(mktemp)
+    GENERATED=$(mktemp -d)
+    trap 'rm -f "$MANIFESTS"; rm -rf "$GENERATED"' EXIT
+
+    {
+      printf '%s\n' "$STEAM_ROOT"
+      sed -n 's/.*"path"[[:space:]]*"\([^"]*\)".*/\1/p' \
+        "$STEAM_ROOT/steamapps/libraryfolders.vdf" 2>/dev/null || true
+    } | while IFS= read -r LIBRARY; do
+      [ -d "$LIBRARY" ] || continue
+      find "$LIBRARY/steamapps" -maxdepth 1 -type f \
+        -name 'appmanifest_*.acf' -print
+    done | sort -u >"$MANIFESTS"
+
+    while IFS= read -r MANIFEST; do
+      APP_ID=$(sed -n 's/.*"appid"[[:space:]]*"\([0-9]*\)".*/\1/p' "$MANIFEST" | head -n 1)
+      NAME=$(sed -n 's/.*"name"[[:space:]]*"\([^"]*\)".*/\1/p' "$MANIFEST" | head -n 1)
+      OWNER=$(sed -n 's/.*"LastOwner"[[:space:]]*"\([0-9]*\)".*/\1/p' "$MANIFEST" | head -n 1)
+      [ -n "$APP_ID" ] && [ -n "$NAME" ] && [ "$OWNER" != 0 ] || continue
+
+      printf '%s\n' \
+        '[Desktop Entry]' \
+        'Type=Application' \
+        "Name=$NAME" \
+        'GenericName=Steam Game' \
+        "Exec=${steam-launch}/bin/steam-launch $APP_ID" \
+        'Icon=steam' \
+        'Terminal=false' \
+        'Categories=Game;' \
+        "X-Steam-AppID=$APP_ID" \
+        >"$GENERATED/steam-game-$APP_ID.desktop"
+    done <"$MANIFESTS"
+
+    mkdir -p "$APPLICATIONS"
+    find "$APPLICATIONS" -maxdepth 1 -type f -name 'steam-game-*.desktop' -delete
+    find "$GENERATED" -maxdepth 1 -type f -name '*.desktop' \
+      -exec cp {} "$APPLICATIONS/" \;
+  '';
+
+  steam-fuzzel = pkgs.writeShellScriptBin "steam-fuzzel" ''
+    ${steam-game-entries}/bin/steam-game-entries
+    exec ${pkgs.fuzzel}/bin/fuzzel "$@"
+  '';
+
+  peggle = pkgs.writeShellScriptBin "peggle" ''
+    exec ${steam-launch}/bin/steam-launch 3540
   '';
 
   update-brave-origin = pkgs.writers.writePython3Bin "update-brave-origin" { } ''
@@ -216,7 +261,8 @@ in
       tmuxPlugins.continuum
       monitor-hotplug
       peggle
-      steam
+      steam-game-entries
+      steam-fuzzel
       workspace-switcher
       update-brave-origin
       obs-studio
@@ -294,7 +340,7 @@ in
     steam = {
       name = "Steam";
       genericName = "Games Store";
-      exec = "steam";
+      exec = "${pkgs.distrobox}/bin/distrobox enter steam-asahi -- steam";
       icon = "steam";
       terminal = false;
       categories = [ "Network" "FileTransfer" "Game" ];
