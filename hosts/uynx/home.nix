@@ -332,7 +332,7 @@ in
         end
         pass-cli item list Personal | fzf --ansi --header="Select an item to view credentials" | string replace -r '^-\s+\[(.*?)\]:.*$' '$1' | read -l id
         if test -n "$id"
-            pass-cli item view --item-id $id
+            pass-cli item view --vault-name Personal --item-id $id
         end
       '';
       shellAliases = {
