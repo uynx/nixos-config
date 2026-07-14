@@ -66,7 +66,7 @@ def get_res():
         monitors = json.loads(subprocess.check_output(["${H}", "monitors", "-j"]))
         hdmi = [m for m in monitors if m["name"] == "HDMI-A-1"]
         target = hdmi[0] if hdmi else [m for m in monitors if m["focused"]][0]
-        return f"{int(target[\"width\"])}x{int(target[\"height\"])}"
+        return f"{int(target[\"width\"] / target[\"scale\"])}x{int(target[\"height\"] / target[\"scale\"])}"
     except Exception:
         return "1920x1080"
 def patch_reg(path, res):
