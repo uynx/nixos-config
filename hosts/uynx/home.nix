@@ -60,8 +60,7 @@ let
     APP_ID=$1
     RESOLUTION=$(${H} monitors -j 2>/dev/null | ${J} -r '
       (if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end) as $m
-      | (($m.reserved // [0, 0, 0, 0]) as $r
-        | "\(((($m.width / $m.scale) - $r[0] - $r[2] - 12) | floor))x\(((($m.height / $m.scale) - $r[1] - $r[3] - 12) | floor))")
+      | "\($m.width)x\($m.height)"
     ' 2>/dev/null) || RESOLUTION=1920x1080
     case "$RESOLUTION" in
       *x[0-9]*) ;;
@@ -92,6 +91,7 @@ let
     PC_CONFIG=$(find "$PREFIX/drive_c/users/steamuser/AppData/Local" \
       -type f -name pcconfig.txt -print -quit 2>/dev/null || true)
     if [ -f "$PC_CONFIG" ]; then
+      chmod u+w "$PC_CONFIG"
       sed -i -E \
         -e "s/^ScreenWidth[[:space:]]+[0-9]+/ScreenWidth            ''$WIDTH/" \
         -e "s/^ScreenHeight[[:space:]]+[0-9]+/ScreenHeight           ''$HEIGHT/" \
@@ -99,7 +99,15 @@ let
         -e "s/^WindowHeight[[:space:]]+[0-9]+/WindowHeight           ''$HEIGHT/" \
         -e "s/^WindowLeft[[:space:]]+[0-9]+/WindowLeft             0/" \
         -e "s/^WindowTop[[:space:]]+[0-9]+/WindowTop              0/" \
+        -e "s/^Widescreen[[:space:]]+[0-9]+/Widescreen             1/" \
         "$PC_CONFIG"
+      chmod u-w "$PC_CONFIG"
+    fi
+
+    if [ "''$APP_ID" = 32440 ]; then
+      exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- \
+        env FEX_X87REDUCEDPRECISION=1 PROTON_USE_WINED3D=1 \
+        steam -silent -applaunch "''$APP_ID"
     fi
 
     exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- \
