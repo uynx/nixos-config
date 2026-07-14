@@ -35,7 +35,8 @@ getconf PAGESIZE
 test -r /dev/kvm && test -w /dev/kvm
 
 distrobox enter steam-asahi -- rpm -q muvm fex-emu fex-emu-rootfs-fedora \
-  virglrenderer mesa-dri-drivers mesa-vulkan-drivers steam
+  virglrenderer mesa-dri-drivers mesa-vulkan-drivers steam \
+  xorg-x11-server-Xwayland
 distrobox enter steam-asahi -- test -e /usr/lib64/dri/asahi_dri.so
 distrobox enter steam-asahi -- test -e /usr/lib64/libvulkan_asahi.so
 distrobox enter steam-asahi -- muvm -i -- FEXBash -c 'uname -m'

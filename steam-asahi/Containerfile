@@ -6,7 +6,8 @@ RUN dnf install -y "dnf5-command(copr)" && \
     dnf install -y \
       asahi-platform-metapackage-fex \
       steam \
-      pulseaudio-utils && \
+      pulseaudio-utils \
+      xorg-x11-server-Xwayland && \
     dnf clean all && \
     rm -rf /var/cache/dnf/* /tmp/* /var/tmp/*
 
