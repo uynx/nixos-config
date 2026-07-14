@@ -55,6 +55,12 @@ let
     done
   '';
 
+  peggle = pkgs.writeShellScriptBin "peggle" ''
+    exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- \
+      env FEX_X87REDUCEDPRECISION=1 \
+      steam -silent -applaunch 3540
+  '';
+
   update-brave-origin = pkgs.writers.writePython3Bin "update-brave-origin" { } ''
     import os
     import re
@@ -191,6 +197,7 @@ in
       tmuxPlugins.resurrect
       tmuxPlugins.continuum
       monitor-hotplug
+      peggle
       workspace-switcher
       update-brave-origin
       obs

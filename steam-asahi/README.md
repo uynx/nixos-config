@@ -46,6 +46,15 @@ The host page size should remain `16384`; the FEX command should print
 `x86_64`. Only test Steam after those checks pass. Start with a lightweight
 OpenGL title before testing Proton or demanding Vulkan games.
 
+Peggle Nights has a dedicated launcher for Fedora Asahi's reduced-precision
+x87 mode, which speeds up legacy game code:
+
+```bash
+peggle
+```
+
+Run it while Steam is fully stopped so the Steam process inherits the setting.
+
 ### Proton VPN
 
 Steam does not need an inbound Proton VPN forwarded port for login or client
