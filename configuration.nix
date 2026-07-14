@@ -1,9 +1,4 @@
 { pkgs, ... }:
-let
-  muvm-fex-wrapper = pkgs.writeShellScriptBin "muvm-fex-wrapper" ''
-    exec muvm -f /home/uynx/.local/share/fex-emu/RootFS/Ubuntu_24_04.ero -- "$@"
-  '';
-in
 {
   imports = [ ./hardware-configuration.nix ];
 
@@ -31,20 +26,6 @@ in
     extraModprobeConfig = ''
       options hid_apple iso_layout=0
     '';
-    binfmt.registrations = {
-      x86_64-linux = {
-        recognitionType = "magic";
-        magicOrExtension = ''\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x3e\x00'';
-        mask = ''\xff\xff\xff\xff\xff\xfe\xfe\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff'';
-        interpreter = "${muvm-fex-wrapper}/bin/muvm-fex-wrapper";
-      };
-      i686-linux = {
-        recognitionType = "magic";
-        magicOrExtension = ''\x7fELF\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x03\x00'';
-        mask = ''\xff\xff\xff\xff\xff\xfe\xfe\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff'';
-        interpreter = "${muvm-fex-wrapper}/bin/muvm-fex-wrapper";
-      };
-    };
   };
 
   networking = {
@@ -92,7 +73,6 @@ in
       "video"
       "audio"
       "docker"
-      "kvm"
     ];
     shell = pkgs.fish;
   };
@@ -111,15 +91,10 @@ in
     fuzzel
     antigravity
     brightnessctl
-    muvm
-    muvm-fex-wrapper
   ];
 
   services = {
     blueman.enable = true;
-    udev.extraRules = ''
-      KERNEL=="kvm", GROUP="kvm", MODE="0660"
-    '';
     xserver = {
       enable = true;
       xkb = {
