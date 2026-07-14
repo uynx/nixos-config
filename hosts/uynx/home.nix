@@ -57,11 +57,7 @@ let
 
   peggle = pkgs.writeShellScriptBin "peggle" ''
     REG_FILE="/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata/3540/pfx/user.reg"
-    if ${H} monitors | grep -q "HDMI-A-1"; then
-      RESOLUTION="1920x1080"
-    else
-      RESOLUTION="1512x945"
-    fi
+    RESOLUTION=$(${H} monitors -j | ${J} -r 'if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end | "\(.width / .scale | floor)x\(.height / .scale | floor)"')
     if [ -f "$REG_FILE" ]; then
       sed -i -E "s/\"Default\"=\"[0-9]+x[0-9]+\"/\"Default\"=\"''$RESOLUTION\"/g" "$REG_FILE"
       sed -i -E "s/\"Peggle\"=\"[0-9]+x[0-9]+\"/\"Peggle\"=\"''$RESOLUTION\"/g" "$REG_FILE"
