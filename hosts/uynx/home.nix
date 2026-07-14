@@ -124,6 +124,7 @@ in
       EDITOR = "nvim";
       VISUAL = "nvim";
       AGY_CLI_DISABLE_AUTO_UPDATE = "true";
+      PROTON_PASS_KEY_PROVIDER = "fs";
     };
     pointerCursor = {
       enable = true;
@@ -200,8 +201,7 @@ in
       peggle
       workspace-switcher
       update-brave-origin
-      obs
-      discord
+      obs-studio
     ];
     file = {
       ".config/nvim".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/nvim";
