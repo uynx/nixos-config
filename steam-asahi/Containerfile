@@ -1,13 +1,19 @@
-FROM quay.io/fedora/fedora-minimal:44
+FROM quay.io/fedora/fedora-minimal@sha256:c5cee2279ec60146ea8123fabf65d493c26f8714fca4a209ca4024f5e386420c
 
 RUN dnf install -y "dnf5-command(copr)" && \
     dnf copr enable -y @asahi/fedora-remix-scripts && \
     dnf copr enable -y @asahi/steam && \
     dnf install -y \
-      asahi-platform-metapackage-fex \
-      steam \
-      pulseaudio-utils \
-      xorg-x11-server-Xwayland && \
+      asahi-platform-metapackage-fex-0-29.fc44.aarch64 \
+      muvm-0.6.0-3.fc44.aarch64 \
+      fex-emu-2604-1.fc44.aarch64 \
+      'fex-emu-rootfs-fedora-44^20260410.n.0-1.fc44.noarch' \
+      virglrenderer-1.3.0-1.fc44.aarch64 \
+      mesa-dri-drivers-26.1.4-1.fc44.aarch64 \
+      mesa-vulkan-drivers-26.1.4-1.fc44.aarch64 \
+      steam-0-14.fc44.noarch \
+      pulseaudio-utils-17.0-9.fc44.aarch64 \
+      xorg-x11-server-Xwayland-24.1.13-1.fc44.aarch64 && \
     dnf clean all && \
     rm -rf /var/cache/dnf/* /tmp/* /var/tmp/*
 

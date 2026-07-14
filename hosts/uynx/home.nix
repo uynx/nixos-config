@@ -55,8 +55,105 @@ let
     done
   '';
 
-  # One stable Steam VM: Venus fixes DXVK black screens on the native DRM path,
-  # while software CEF prevents steamwebhelper's GPU process from crash-looping.
+  steam-asahi-doctor = pkgs.writeShellScriptBin "steam-asahi-doctor" ''
+    set -eu
+
+    IMAGE=localhost/steam-asahi:44
+    CONTAINER=steam-asahi
+
+    [ "$(${pkgs.glibc.bin}/bin/getconf PAGESIZE)" = 16384 ]
+    [ -r /dev/kvm ] && [ -w /dev/kvm ]
+    ${pkgs.docker}/bin/docker image inspect "$IMAGE" >/dev/null
+    ${pkgs.docker}/bin/docker container inspect "$CONTAINER" >/dev/null
+    ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- rpm -q \
+      asahi-platform-metapackage-fex-0-29.fc44.aarch64 \
+      muvm-0.6.0-3.fc44.aarch64 \
+      fex-emu-2604-1.fc44.aarch64 \
+      'fex-emu-rootfs-fedora-44^20260410.n.0-1.fc44.noarch' \
+      virglrenderer-1.3.0-1.fc44.aarch64 \
+      mesa-dri-drivers-26.1.4-1.fc44.aarch64 \
+      mesa-vulkan-drivers-26.1.4-1.fc44.aarch64 \
+      steam-0-14.fc44.noarch \
+      pulseaudio-utils-17.0-9.fc44.aarch64 \
+      xorg-x11-server-Xwayland-24.1.13-1.fc44.aarch64 >/dev/null
+    ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- \
+      test -e /usr/lib64/dri/asahi_dri.so
+    ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- \
+      test -e /usr/lib64/libvulkan_asahi.so
+    printf '%s\n' "Steam Asahi container checks passed."
+  '';
+
+  steam-asahi-bootstrap = pkgs.writeShellScriptBin "steam-asahi-bootstrap" ''
+    set -eu
+
+    SOURCE=/home/uynx/nixos-config/steam-asahi
+    IMAGE=localhost/steam-asahi:44
+    CONTAINER=steam-asahi
+    LABEL=io.uynx.steam-asahi.config
+
+    if [ ! -f "$SOURCE/Containerfile" ] || [ ! -f "$SOURCE/distrobox.ini" ]; then
+      ${pkgs.libnotify}/bin/notify-send \
+        "Steam setup unavailable" \
+        "Missing the versioned steam-asahi container files."
+      exit 1
+    fi
+
+    CONFIG_HASH=$(
+      ${pkgs.coreutils}/bin/sha256sum \
+        "$SOURCE/Containerfile" "$SOURCE/distrobox.ini" \
+        | ${pkgs.coreutils}/bin/sha256sum \
+        | ${pkgs.coreutils}/bin/cut -d' ' -f1
+    )
+    IMAGE_HASH=$(
+      ${pkgs.docker}/bin/docker image inspect \
+        --format "{{ index .Config.Labels \"$LABEL\" }}" \
+        "$IMAGE" 2>/dev/null || true
+    )
+    REPLACE=0
+
+    if [ "$IMAGE_HASH" != "$CONFIG_HASH" ]; then
+      ${pkgs.docker}/bin/docker build \
+        --label "$LABEL=$CONFIG_HASH" \
+        --tag "$IMAGE" \
+        --file "$SOURCE/Containerfile" \
+        "$SOURCE"
+      REPLACE=1
+    fi
+
+    IMAGE_ID=$(
+      ${pkgs.docker}/bin/docker image inspect \
+        --format '{{.Id}}' "$IMAGE"
+    )
+    if ! ${pkgs.docker}/bin/docker container inspect "$CONTAINER" >/dev/null 2>&1; then
+      ${pkgs.distrobox}/bin/distrobox assemble create \
+        --file "$SOURCE/distrobox.ini"
+      REPLACE=0
+    else
+      CONTAINER_IMAGE_ID=$(
+        ${pkgs.docker}/bin/docker container inspect \
+          --format '{{.Image}}' "$CONTAINER"
+      )
+    fi
+    if [ "$REPLACE" = 1 ] || \
+       { [ -n "''${CONTAINER_IMAGE_ID:-}" ] && [ "$CONTAINER_IMAGE_ID" != "$IMAGE_ID" ]; }; then
+      ${pkgs.distrobox}/bin/distrobox assemble create \
+        --replace \
+        --file "$SOURCE/distrobox.ini"
+    fi
+
+    ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- rpm -q \
+      muvm-0.6.0-3.fc44.aarch64 \
+      fex-emu-2604-1.fc44.aarch64 \
+      'fex-emu-rootfs-fedora-44^20260410.n.0-1.fc44.noarch' \
+      virglrenderer-1.3.0-1.fc44.aarch64 \
+      mesa-dri-drivers-26.1.4-1.fc44.aarch64 \
+      mesa-vulkan-drivers-26.1.4-1.fc44.aarch64 \
+      steam-0-14.fc44.noarch \
+      xorg-x11-server-Xwayland-24.1.13-1.fc44.aarch64 >/dev/null
+  '';
+
+  # One reproducible Steam VM: Venus fixes DXVK black screens on the native DRM
+  # path, while software CEF prevents steamwebhelper's GPU process crash loop.
   steam-asahi = pkgs.writeShellScriptBin "steam-asahi" ''
     set -eu
 
@@ -74,9 +171,14 @@ let
       exit 0
     fi
 
+    ${steam-asahi-bootstrap}/bin/steam-asahi-bootstrap
+
     STEAM_BIN=/home/uynx/.local/share/steam-asahi/home/.local/share/fex-steam/steam-launcher/bin_steam.sh
     if [ ! -x "$STEAM_BIN" ]; then
-      exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- steam
+      ${pkgs.libnotify}/bin/notify-send \
+        "Steam setup incomplete" \
+        "Fedora's FEX Steam launcher is missing from the container home."
+      exit 1
     fi
 
     STEAM_ARGS=-cef-disable-gpu
@@ -112,7 +214,7 @@ let
     COMPAT="/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata"
     PREFIX="$COMPAT/''${APP_ID}/pfx"
     REG_FILE="$PREFIX/user.reg"
-    if [ -f "$REG_FILE" ]; then
+    if [ "$APP_ID" = 3540 ] && [ -f "$REG_FILE" ]; then
       STAMP=$(date +%s)
       # Older versions of this helper let printf consume registry backslashes.
       # Remove those malformed sections before writing the real Wine keys.
@@ -134,17 +236,18 @@ let
           '[Software\\Wine\\Explorer\\Desktops]' \
           "$STAMP" "$STAMP" "$RESOLUTION" "$RESOLUTION" >>"$REG_FILE"
       fi
-      if [ "$APP_ID" = 3540 ]; then
-        sed -i -E \
-          -e 's/"ScreenMode"=dword:[0-9a-fA-F]+/"ScreenMode"=dword:00000000/' \
-          -e 's/"CustomCursors"=dword:[0-9a-fA-F]+/"CustomCursors"=dword:00000000/' \
-          "$REG_FILE"
-      fi
+      sed -i -E \
+        -e 's/"ScreenMode"=dword:[0-9a-fA-F]+/"ScreenMode"=dword:00000000/' \
+        -e 's/"CustomCursors"=dword:[0-9a-fA-F]+/"CustomCursors"=dword:00000000/' \
+        "$REG_FILE"
     fi
 
-    PC_CONFIG=$(find "$PREFIX/drive_c/users/steamuser/AppData/Local" \
-      -type f -name pcconfig.txt -print -quit 2>/dev/null || true)
-    if [ -f "$PC_CONFIG" ]; then
+    PC_CONFIG=
+    if [ "$APP_ID" = 32440 ]; then
+      PC_CONFIG=$(find "$PREFIX/drive_c/users/steamuser/AppData/Local" \
+        -type f -name pcconfig.txt -print -quit 2>/dev/null || true)
+    fi
+    if [ -n "$PC_CONFIG" ] && [ -f "$PC_CONFIG" ]; then
       chmod u+w "$PC_CONFIG"
       sed -i -E \
         -e "s/^ScreenWidth[[:space:]]+[0-9]+/ScreenWidth            ''$WIDTH/" \
@@ -300,6 +403,8 @@ in
     };
     packages = with pkgs; [
       steam-asahi
+      steam-asahi-bootstrap
+      steam-asahi-doctor
       hyprlandPlugins.hy3
       hyprpaper
       coreutils
