@@ -47,4 +47,8 @@ RUN dnf install -y pulseaudio-utils && \
     dnf clean all && \
     rm -rf /var/cache/dnf/* /tmp/* /var/tmp/*
 
+# The Asahi Steam wrapper's Qt bootstrap splash is oversized on this desktop.
+# Steam itself remains unchanged; only the wrapper's transient splash is disabled.
+RUN sed -i 's/^show_splash = True/show_splash = False/' /usr/bin/steam
+
 CMD ["/bin/bash"]
