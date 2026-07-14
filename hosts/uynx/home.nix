@@ -107,6 +107,10 @@ let
     print("Updated brave-origin.nix successfully!")
   '';
 
+  steam-launcher = pkgs.writeShellScriptBin "steam" ''
+    exec /home/uynx/.local/share/Steam/ubuntu12_32/steam "$@"
+  '';
+
   home = "/home/uynx";
 in
 {
@@ -193,6 +197,7 @@ in
       workspace-switcher
       update-brave-origin
       distrobox
+      steam-launcher
     ];
     file = {
       ".config/nvim".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/nvim";
