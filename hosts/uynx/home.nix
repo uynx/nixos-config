@@ -73,9 +73,15 @@ let
     REG_FILE="$PREFIX/user.reg"
     if [ -f "$REG_FILE" ]; then
       STAMP=$(date +%s)
+      # Older versions of this helper let printf consume registry backslashes.
+      # Remove those malformed sections before writing the real Wine keys.
+      sed -i -E \
+        -e '/^\[SoftwareWineExplorer\]/,/^$/d' \
+        -e '/^\[SoftwareWineExplorerDesktops\]/,/^$/d' \
+        "$REG_FILE"
       if ! grep -Fq '[Software\\Wine\\Explorer]' "$REG_FILE"; then
-        printf '\n[Software\\Wine\\Explorer] %s\n#time=%s\n"Desktop"="Default"\n' \
-          "$STAMP" "$STAMP" >>"$REG_FILE"
+        printf '\n%s %s\n#time=%s\n"Desktop"="Default"\n' \
+          '[Software\\Wine\\Explorer]' "$STAMP" "$STAMP" >>"$REG_FILE"
       fi
       if grep -Fq '[Software\\Wine\\Explorer\\Desktops]' "$REG_FILE"; then
         sed -i -E \
@@ -83,7 +89,8 @@ let
           -e "s/\"Peggle\"=\"[0-9]+x[0-9]+\"/\"Peggle\"=\"''$RESOLUTION\"/g" \
           "$REG_FILE"
       else
-        printf '\n[Software\\Wine\\Explorer\\Desktops] %s\n#time=%s\n"Default"="%s"\n"Peggle"="%s"\n' \
+        printf '\n%s %s\n#time=%s\n"Default"="%s"\n"Peggle"="%s"\n' \
+          '[Software\\Wine\\Explorer\\Desktops]' \
           "$STAMP" "$STAMP" "$RESOLUTION" "$RESOLUTION" >>"$REG_FILE"
       fi
     fi
@@ -104,10 +111,15 @@ let
       chmod u-w "$PC_CONFIG"
     fi
 
-    if [ "''$APP_ID" = 32440 ]; then
-      exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- \
-        env FEX_X87REDUCEDPRECISION=1 PROTON_USE_WINED3D=1 \
-        steam -silent -applaunch "''$APP_ID"
+    # Fedora Asahi's Steam wrapper starts a new muvm on every invocation.
+    # Starting it while Steam is open makes the existing client close/reopen.
+    if ${H} clients -j 2>/dev/null | ${J} -e '
+      any(.[]; ((.class // "") | ascii_downcase) == "steam")
+    ' >/dev/null 2>&1; then
+      ${pkgs.libnotify}/bin/notify-send \
+        "Steam game prepared" \
+        "Resolution updated. Launch app ''$APP_ID from the open Steam window."
+      exit 0
     fi
 
     exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- \
