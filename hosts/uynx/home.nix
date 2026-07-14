@@ -118,7 +118,6 @@ in
       EDITOR = "nvim";
       VISUAL = "nvim";
       AGY_CLI_DISABLE_AUTO_UPDATE = "true";
-      DBX_CONTAINER_MANAGER = "docker";
     };
     pointerCursor = {
       enable = true;
@@ -182,8 +181,6 @@ in
       wireshark
       dive
       distrobox
-      mesa-demos
-      vulkan-tools
       swi-prolog
       libreoffice
       cava
@@ -196,6 +193,8 @@ in
       monitor-hotplug
       workspace-switcher
       update-brave-origin
+      obs
+      discord
     ];
     file = {
       ".config/nvim".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/nvim";
@@ -246,8 +245,7 @@ in
         "${home}/ai_memory/concepts" \
         "${home}/ai_memory/journal" \
         "${home}/dotfiles" \
-        "${home}/nixos-config" \
-        "${home}/.local/share/steam-asahi/home"
+        "${home}/nixos-config"
     '';
   };
 

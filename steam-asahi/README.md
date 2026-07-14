@@ -33,8 +33,6 @@ Keep failures isolated by checking each layer in order:
 ```bash
 getconf PAGESIZE
 test -r /dev/kvm && test -w /dev/kvm
-glxinfo -B
-vulkaninfo --summary
 
 distrobox enter steam-asahi -- rpm -q muvm fex-emu fex-emu-rootfs-fedora \
   virglrenderer mesa-dri-drivers mesa-vulkan-drivers steam

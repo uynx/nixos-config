@@ -1,49 +1,12 @@
 FROM quay.io/fedora/fedora-minimal:44
 
-WORKDIR /
-
 RUN dnf install -y "dnf5-command(copr)" && \
     dnf copr enable -y @asahi/fedora-remix-scripts && \
-    dnf copr enable -y @asahi/steam
-
-RUN dnf upgrade --refresh -y && \
+    dnf copr enable -y @asahi/steam && \
     dnf install -y \
       asahi-platform-metapackage-fex \
       steam \
-      fontconfig \
-      dejavu-sans-fonts \
-      dejavu-serif-fonts \
-      dejavu-sans-mono-fonts \
-      sudo \
-      xz \
-      procps-ng \
-      xterm \
-      binutils \
-      tar \
-      bash \
-      coreutils \
-      util-linux \
-      findutils \
-      grep \
-      sed \
-      gawk \
-      gzip \
-      which \
-      less \
-      passwd \
-      shadow-utils \
-      systemd \
-      iproute \
-      iputils \
-      curl \
-      wget \
-      mesa-libGLU \
-      ca-certificates \
-      alsa-utils && \
-    dnf clean all && \
-    rm -rf /var/cache/dnf/* /tmp/* /var/tmp/*
-
-RUN dnf install -y pulseaudio-utils && \
+      pulseaudio-utils && \
     dnf clean all && \
     rm -rf /var/cache/dnf/* /tmp/* /var/tmp/*
 
