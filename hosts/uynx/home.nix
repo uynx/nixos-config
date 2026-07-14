@@ -55,13 +55,51 @@ let
     done
   '';
 
-  # Shared helper: patch Wine VD resolution for any game prefix, then launch
+  # One stable Steam VM: Venus fixes DXVK black screens on the native DRM path,
+  # while software CEF prevents steamwebhelper's GPU process from crash-looping.
+  steam-asahi = pkgs.writeShellScriptBin "steam-asahi" ''
+    set -eu
+
+    APP_ID=''${1:-}
+    STEAM_ADDRESS=$(${H} clients -j 2>/dev/null | ${J} -r '
+      [.[] | select(((.class // "") | ascii_downcase) == "steam") | .address][0] // empty
+    ' 2>/dev/null || true)
+    if [ -n "$STEAM_ADDRESS" ]; then
+      ${H} dispatch focuswindow "address:$STEAM_ADDRESS" >/dev/null 2>&1 || true
+      if [ -n "$APP_ID" ]; then
+        ${pkgs.libnotify}/bin/notify-send \
+          "Steam is already open" \
+          "Launch app $APP_ID from the existing Steam window."
+      fi
+      exit 0
+    fi
+
+    STEAM_BIN=/home/uynx/.local/share/steam-asahi/home/.local/share/fex-steam/steam-launcher/bin_steam.sh
+    if [ ! -x "$STEAM_BIN" ]; then
+      exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- steam
+    fi
+
+    STEAM_ARGS=-cef-disable-gpu
+    if [ -n "$APP_ID" ]; then
+      case "$APP_ID" in
+        *[!0-9]*) exit 2 ;;
+      esac
+      STEAM_ARGS="$STEAM_ARGS -silent -applaunch $APP_ID"
+    fi
+
+    exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- \
+      /usr/bin/muvm --gpu-mode=venus -- FEXBash -c \
+      "$STEAM_BIN $STEAM_ARGS"
+  '';
+
+  # Legacy games still need a Wine virtual desktop and fixed aspect ratio.
   steam-launch = pkgs.writeShellScriptBin "steam-launch" ''
     APP_ID=$1
     RESOLUTION=$(${H} monitors -j 2>/dev/null | ${J} -r '
       (if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end) as $m
       | "\($m.width)x\($m.height)"
     ' 2>/dev/null) || RESOLUTION=1920x1080
+    [ "$APP_ID" = 32440 ] && RESOLUTION=1280x720
     case "$RESOLUTION" in
       *x[0-9]*) ;;
       *) RESOLUTION=1920x1080 ;;
@@ -122,9 +160,7 @@ let
       exit 0
     fi
 
-    exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- \
-      env FEX_X87REDUCEDPRECISION=1 \
-      steam -silent -applaunch "''$APP_ID"
+    exec ${steam-asahi}/bin/steam-asahi "$APP_ID"
   '';
 
   steam-game-entries = pkgs.writeShellScriptBin "steam-game-entries" ''
@@ -254,6 +290,7 @@ in
       size = 24;
     };
     packages = with pkgs; [
+      steam-asahi
       hyprlandPlugins.hy3
       hyprpaper
       coreutils
@@ -397,7 +434,7 @@ in
     steam = {
       name = "Steam";
       genericName = "Games Store";
-      exec = "${pkgs.distrobox}/bin/distrobox enter steam-asahi -- steam";
+      exec = "${steam-asahi}/bin/steam-asahi";
       icon = "steam";
       terminal = false;
       categories = [ "Network" "FileTransfer" "Game" ];
