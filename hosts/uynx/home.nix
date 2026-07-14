@@ -92,18 +92,21 @@ let
       "$STEAM_BIN $STEAM_ARGS"
   '';
 
-  # Legacy games still need a Wine virtual desktop and fixed aspect ratio.
+  # Match Wine's virtual desktop to the target monitor's exact logical size.
   steam-launch = pkgs.writeShellScriptBin "steam-launch" ''
+    set -eu
+
     APP_ID=$1
-    RESOLUTION=$(${H} monitors -j 2>/dev/null | ${J} -r '
-      (if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end) as $m
-      | "\($m.width)x\($m.height)"
-    ' 2>/dev/null) || RESOLUTION=1920x1080
-    [ "$APP_ID" = 32440 ] && RESOLUTION=1280x720
-    case "$RESOLUTION" in
-      *x[0-9]*) ;;
-      *) RESOLUTION=1920x1080 ;;
-    esac
+    if ! RESOLUTION=$(${H} monitors -j 2>/dev/null | ${J} -er '
+      (if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end)
+      | select(.width > 0 and .height > 0 and .scale > 0)
+      | "\((.width / .scale) | floor)x\((.height / .scale) | floor)"
+    ' 2>/dev/null); then
+      ${pkgs.libnotify}/bin/notify-send \
+        "Steam game not launched" \
+        "Could not read the target monitor resolution from Hyprland."
+      exit 1
+    fi
     WIDTH=''${RESOLUTION%x*}
     HEIGHT=''${RESOLUTION#*x}
     COMPAT="/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata"
@@ -130,6 +133,12 @@ let
         printf '\n%s %s\n#time=%s\n"Default"="%s"\n"Peggle"="%s"\n' \
           '[Software\\Wine\\Explorer\\Desktops]' \
           "$STAMP" "$STAMP" "$RESOLUTION" "$RESOLUTION" >>"$REG_FILE"
+      fi
+      if [ "$APP_ID" = 3540 ]; then
+        sed -i -E \
+          -e 's/"ScreenMode"=dword:[0-9a-fA-F]+/"ScreenMode"=dword:00000000/' \
+          -e 's/"CustomCursors"=dword:[0-9a-fA-F]+/"CustomCursors"=dword:00000000/' \
+          "$REG_FILE"
       fi
     fi
 
