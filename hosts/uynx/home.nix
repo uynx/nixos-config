@@ -326,6 +326,10 @@ in
         sudo nixos-rebuild switch --flake ~/nixos-config#$target --impure
       '';
       functions.pass-find.body = ''
+        if not pass-cli test >/dev/null 2>&1
+            pass-cli test
+            or return 1
+        end
         pass-cli item list Personal | fzf --ansi --header="Select an item to view credentials" | string replace -r '^-\s+\[(.*?)\]:.*$' '$1' | read -l id
         if test -n "$id"
             pass-cli item view --item-id $id
