@@ -55,63 +55,27 @@ let
     done
   '';
 
-  steam-wrapper = pkgs.writeShellScriptBin "steam-wrapper" ''
-    COMPATDATA="/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata"
-    
-    # Run dynamic resolution updater in background
-    ${pkgs.python3}/bin/python3 -c '
-import glob, re, json, subprocess, time, os
-def get_res():
-    try:
-        monitors = json.loads(subprocess.check_output(["${H}", "monitors", "-j"]))
-        hdmi = [m for m in monitors if m["name"] == "HDMI-A-1"]
-        target = hdmi[0] if hdmi else [m for m in monitors if m["focused"]][0]
-        w = int(target["width"] / target["scale"])
-        h = int(target["height"] / target["scale"])
-        if "reserved" in target and len(target["reserved"]) >= 2:
-            h -= target["reserved"][1]
-        return f"{w}x{h}"
-    except Exception:
-        return "1920x1080"
-def patch_reg(path, res):
-    try:
-        with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            text = f.read()
-        changed = False
-        if "[Software\\\\Wine\\\\Explorer]" not in text:
-            text += "\n\n[Software\\\\Wine\\\\Explorer] 1784003478\n\"Desktop\"=\"Default\""
-            changed = True
-        if "[Software\\\\Wine\\\\Explorer\\\\Desktops]" not in text:
-            text += f"\n\n[Software\\\\Wine\\\\Explorer\\\\Desktops] 1784003478\n\"Default\"=\"{res}\"\n\"Peggle\"=\"{res}\""
-            changed = True
-        else:
-            new_text = re.sub(r"\"Default\"=\"[0-9]+x[0-9]+\"", f"\"Default\"=\"{res}\"", text)
-            new_text = re.sub(r"\"Peggle\"=\"[0-9]+x[0-9]+\"", f"\"Peggle\"=\"{res}\"", new_text)
-            if new_text != text:
-                text = new_text
-                changed = True
-        if changed:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(text)
-    except Exception:
-        pass
-compatdata = os.environ.get("COMPATDATA", "/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata")
-while True:
-    res = get_res()
-    for path in glob.glob(compatdata + "/*/pfx/user.reg"):
-        patch_reg(path, res)
-    time.sleep(2)
-' &
-    UPDATER_PID=$!
-    trap "kill ''$UPDATER_PID 2>/dev/null" EXIT
-
+  peggle = pkgs.writeShellScriptBin "peggle" ''
+    REG_FILE="/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata/3540/pfx/user.reg"
+    RESOLUTION=$(${H} monitors -j | ${J} -r 'if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end | "\(((.width / .scale) - .reserved[0] - .reserved[2] - 12) | floor)x\(((.height / .scale) - .reserved[1] - .reserved[3] - 12) | floor)"')
+    if [ -f "$REG_FILE" ]; then
+      sed -i -E "s/\"Default\"=\"[0-9]+x[0-9]+\"/\"Default\"=\"''$RESOLUTION\"/g" "$REG_FILE"
+      sed -i -E "s/\"Peggle\"=\"[0-9]+x[0-9]+\"/\"Peggle\"=\"''$RESOLUTION\"/g" "$REG_FILE"
+    fi
     exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- \
       env FEX_X87REDUCEDPRECISION=1 \
-      steam "''$@"
+      steam -silent -applaunch 3540
   '';
 
-  peggle = pkgs.writeShellScriptBin "peggle" ''
-    exec ${steam-wrapper}/bin/steam-wrapper -silent -applaunch 3540
+  steam = pkgs.writeShellScriptBin "steam" ''
+    RESOLUTION=$(${H} monitors -j | ${J} -r 'if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end | "\(((.width / .scale) - .reserved[0] - .reserved[2] - 12) | floor)x\(((.height / .scale) - .reserved[1] - .reserved[3] - 12) | floor)"')
+    for reg in /home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata/*/pfx/user.reg; do
+      if [ -f "$reg" ]; then
+        sed -i -E "s/\"Default\"=\"[0-9]+x[0-9]+\"/\"Default\"=\"''$RESOLUTION\"/g" "$reg"
+        sed -i -E "s/\"Peggle\"=\"[0-9]+x[0-9]+\"/\"Peggle\"=\"''$RESOLUTION\"/g" "$reg"
+      fi
+    done
+    exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- steam "$@"
   '';
 
   update-brave-origin = pkgs.writers.writePython3Bin "update-brave-origin" { } ''
@@ -252,7 +216,7 @@ in
       tmuxPlugins.continuum
       monitor-hotplug
       peggle
-      steam-wrapper
+      steam
       workspace-switcher
       update-brave-origin
       obs-studio
@@ -330,7 +294,7 @@ in
     steam = {
       name = "Steam";
       genericName = "Games Store";
-      exec = "steam-wrapper";
+      exec = "steam";
       icon = "steam";
       terminal = false;
       categories = [ "Network" "FileTransfer" "Game" ];
