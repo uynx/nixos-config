@@ -330,7 +330,7 @@ in
             pass-cli test
             or return 1
         end
-        pass-cli item list Personal | fzf --ansi --header="Select an item to view credentials" | string replace -r '^-\s+\[(.*?)\]:.*$' '$1' | read -l id
+        pass-cli item list Personal --output json | jq -r '(.items // .)[] | "[\((.item_type // .itemType // .type // "unknown") | ascii_upcase)] \(.title // .name)\t\(.id // .item_id // .itemId)"' | fzf --ansi --header="Select an item to view credentials" --with-nth=1 | string split \t | read -l display_name id
         if test -n "$id"
             pass-cli item view --vault-name Personal --item-id $id
         end
