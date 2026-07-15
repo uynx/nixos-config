@@ -49,21 +49,23 @@ Every Steam session starts through the same versioned launcher with:
 Pressing `Alt+Space` regenerates desktop entries from installed Steam manifests
 before opening Fuzzel. Newly installed games therefore appear automatically,
 and every generated entry routes through the shared launcher. Selecting Steam
-starts a normal Venus VM and opens the client. Selecting a game stops any stale
-Steam container, applies its known compatibility settings, and starts a fresh
-hidden Steam session directly with `-silent -applaunch <appid>`; it never asks
-the user to find the game in an already-open Steam window.
+focuses its existing window or starts a normal Venus client. Selecting a game
+focuses its existing window, forwards through an open client, or starts a
+hidden Venus session when Steam is closed. A watcher true-fullscreens each new
+game. After the last game closes, headless Steam stops automatically; a Steam
+window or another running game keeps the container alive.
 
-Pressing `Alt+Q` while Steam or a `steam_app_<id>` game is active stops the
-entire dedicated container, including Steam, FEX, and muvm. On other windows it
-retains the normal close-window behavior. The next Steam or game selection in
-Fuzzel starts the container and VM again automatically.
+Pressing `Alt+Q` on Steam stops the entire dedicated container, including
+Steam, FEX, and muvm. On a game, it preserves Steam when a Steam window or
+another game exists; otherwise it stops the headless container. On other
+windows it retains normal close behavior.
 
 Legacy settings are intentionally scoped instead of being forced on unknown
 games:
 
-- Peggle Nights (3540): exact-size Wine virtual desktop, windowed game mode,
-  and Wine custom cursors disabled so pointer coordinates remain 1:1.
+- Peggle Nights (3540): exact-size Wine virtual desktop and Wine custom cursors
+  disabled so pointer coordinates remain 1:1. Game watcher compositor-
+  fullscreens that internal desktop, so no windowed Wine frame remains visible.
 - LEGO Star Wars: The Complete Saga (32440): exact monitor dimensions written
   to `pcconfig.txt`; the launcher enforces the working Proton 10 compatibility
   mapping before Steam starts. Experimental and Proton 11 render menus but not

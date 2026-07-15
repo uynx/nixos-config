@@ -80,6 +80,8 @@ let
       test -e /usr/lib64/dri/asahi_dri.so
     ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- \
       test -e /usr/lib64/libvulkan_asahi.so
+    ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- \
+      test -x /opt/fex-steam/steam-launcher/bin_steam.sh
     printf '%s\n' "Steam Asahi container checks passed."
   '';
 
@@ -150,6 +152,8 @@ let
       mesa-vulkan-drivers-26.1.4-1.fc44.aarch64 \
       steam-0-14.fc44.noarch \
       xorg-x11-server-Xwayland-24.1.13-1.fc44.aarch64 >/dev/null
+    ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- \
+      test -x /opt/fex-steam/steam-launcher/bin_steam.sh
   '';
 
   # Steam, FEX, and muvm all live inside this dedicated container. Stopping the
@@ -181,10 +185,17 @@ let
         ".local/share/Steam/config/config.vdf"
     )
     app_id, tool = sys.argv[1:3]
-    if not config.is_file():
-        raise SystemExit(0)
-
-    text = config.read_text()
+    if config.is_file():
+        text = config.read_text()
+    else:
+        config.parent.mkdir(parents=True, exist_ok=True)
+        text = (
+            '"InstallConfigStore"\n{\n'
+            '\t"Software"\n\t{\n'
+            '\t\t"Valve"\n\t\t{\n'
+            '\t\t\t"Steam"\n\t\t\t{\n'
+            '\t\t\t}\n\t\t}\n\t}\n}\n'
+        )
 
 
     def block_for_key(source, key, low=0, high=None):
@@ -256,8 +267,35 @@ let
             text = text[:app[0]] + updated + text[app[1]:]
 
     temporary = config.with_suffix(".vdf.tmp")
-    temporary.write_text(text)
-    temporary.replace(config)
+    if not config.is_file() or config.read_text() != text:
+        temporary.write_text(text)
+        temporary.replace(config)
+  '';
+
+  # Forward commands through Steam's FIFO from a short-lived 4 KiB FEX guest.
+  # This touches neither the running Steam process nor its owning Venus VM.
+  steam-asahi-remote = pkgs.writeShellScriptBin "steam-asahi-remote" ''
+    set -eu
+
+    TARGET=$1
+    case "$TARGET" in
+      ui)
+        URL=steam://open/main
+        ;;
+      *[!0-9]*|"")
+        exit 2
+        ;;
+      *)
+        URL=steam://rungameid/$TARGET
+        ;;
+    esac
+
+    STEAM_HOME=/home/uynx/.local/share/steam-asahi/home/.steam
+    REMOTE="$STEAM_HOME/root/ubuntu12_32/steam-runtime/amd64/usr/bin/steam-runtime-steam-remote"
+    [ -p "$STEAM_HOME/steam.pipe" ] && [ -x "$REMOTE" ]
+
+    exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- \
+      /usr/bin/muvm -- FEXBash -c "$REMOTE $URL"
   '';
 
   steam-asahi-run = pkgs.writeShellScriptBin "steam-asahi-run" ''
@@ -265,14 +303,9 @@ let
 
     APP_ID=''${1:-}
     ${steam-asahi-bootstrap}/bin/steam-asahi-bootstrap
+    ${steam-compat-config}/bin/steam-compat-config 32440 proton_10
 
-    STEAM_BIN=/home/uynx/.local/share/steam-asahi/home/.local/share/fex-steam/steam-launcher/bin_steam.sh
-    if [ ! -x "$STEAM_BIN" ]; then
-      ${pkgs.libnotify}/bin/notify-send \
-        "Steam setup incomplete" \
-        "Fedora's FEX Steam launcher is missing from the container home."
-      exit 1
-    fi
+    STEAM_BIN=/opt/fex-steam/steam-launcher/bin_steam.sh
 
     STEAM_ARGS=-cef-disable-gpu
     if [ -n "$APP_ID" ]; then
@@ -292,8 +325,81 @@ let
   steam-asahi = pkgs.writeShellScriptBin "steam-asahi" ''
     set -eu
 
+    STEAM_ADDRESS=$(${H} clients -j 2>/dev/null | ${J} -r '
+      [.[] | select(((.class // "") | ascii_downcase) == "steam") | .address][0] // empty
+    ' 2>/dev/null || true)
+    if [ -n "$STEAM_ADDRESS" ]; then
+      exec ${H} dispatch focuswindow "address:$STEAM_ADDRESS"
+    fi
+
+    if [ "$(${pkgs.docker}/bin/docker container inspect \
+      --format '{{.State.Running}}' steam-asahi 2>/dev/null || true)" = true ] && \
+       [ -p /home/uynx/.local/share/steam-asahi/home/.steam/steam.pipe ]; then
+      ${steam-asahi-remote}/bin/steam-asahi-remote ui || true
+      for _ in $(${pkgs.coreutils}/bin/seq 1 50); do
+        STEAM_ADDRESS=$(${H} clients -j 2>/dev/null | ${J} -r '
+          [.[] | select(((.class // "") | ascii_downcase) == "steam") | .address][0] // empty
+        ' 2>/dev/null || true)
+        if [ -n "$STEAM_ADDRESS" ]; then
+          exec ${H} dispatch focuswindow "address:$STEAM_ADDRESS"
+        fi
+        sleep 0.1
+      done
+      exit 0
+    fi
+
     ${steam-asahi-stop}/bin/steam-asahi-stop
     exec ${steam-asahi-run}/bin/steam-asahi-run "$@"
+  '';
+
+  steam-game-watch = pkgs.writeShellScriptBin "steam-game-watch" ''
+    set -u
+
+    APP_ID=$1
+    LOCK=$2
+    CLASS=steam_app_$APP_ID
+    cleanup() { rm -rf "$LOCK"; }
+    trap cleanup EXIT
+    printf '%s\n' "$$" >"$LOCK/pid"
+
+    ADDRESS=
+    for _ in $(${pkgs.coreutils}/bin/seq 1 600); do
+      ADDRESS=$(${H} clients -j 2>/dev/null | ${J} -r --arg class "$CLASS" '
+        [.[] | select(((.class // "") | ascii_downcase) == $class) | .address][0] // empty
+      ' 2>/dev/null || true)
+      [ -n "$ADDRESS" ] && break
+      sleep 0.5
+    done
+
+    if [ -z "$ADDRESS" ]; then
+      WINDOWS=$(${H} clients -j 2>/dev/null | ${J} -r '
+        any(.[]; ((.class // "") | ascii_downcase) == "steam" or
+                 ((.class // "") | test("^steam_app_[0-9]+$")))
+      ' 2>/dev/null || echo true)
+      [ "$WINDOWS" = true ] || ${steam-asahi-stop}/bin/steam-asahi-stop
+      exit 0
+    fi
+
+    ${H} dispatch focuswindow "address:$ADDRESS" >/dev/null 2>&1 || true
+    FULLSCREEN=$(${H} clients -j 2>/dev/null | ${J} -r --arg address "$ADDRESS" '
+      [.[] | select(.address == $address) | .fullscreen][0] // 0
+    ' 2>/dev/null || echo 0)
+    if [ "$FULLSCREEN" = 0 ]; then
+      ${H} dispatch fullscreen 0 >/dev/null 2>&1 || true
+    fi
+
+    while ${H} clients -j 2>/dev/null | ${J} -e --arg class "$CLASS" '
+      any(.[]; ((.class // "") | ascii_downcase) == $class)
+    ' >/dev/null 2>&1; do
+      sleep 0.5
+    done
+    sleep 1
+
+    WINDOWS=$(${H} clients -j 2>/dev/null | ${J} -r '
+      any(.[]; ((.class // "") | ascii_downcase) == "steam" or
+               ((.class // "") | test("^steam_app_[0-9]+$")))
+    ' 2>/dev/null || echo true)
+    [ "$WINDOWS" = true ] || ${steam-asahi-stop}/bin/steam-asahi-stop
   '';
 
   # Match Wine's virtual desktop to the target monitor's exact logical size.
@@ -305,9 +411,31 @@ let
       *[!0-9]*|"") exit 2 ;;
     esac
 
-    # Never forward through an existing x86 Steam client. A game entry owns one
-    # fresh hidden Steam session, so repeated Fuzzel launches are deterministic.
-    ${steam-asahi-stop}/bin/steam-asahi-stop
+    CLASS=steam_app_$APP_ID
+    GAME_ADDRESS=$(${H} clients -j 2>/dev/null | ${J} -r --arg class "$CLASS" '
+      [.[] | select(((.class // "") | ascii_downcase) == $class) | .address][0] // empty
+    ' 2>/dev/null || true)
+    if [ -n "$GAME_ADDRESS" ]; then
+      exec ${H} dispatch focuswindow "address:$GAME_ADDRESS"
+    fi
+
+    LOCK="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/steam-asahi-launch-$APP_ID"
+    if ! mkdir "$LOCK" 2>/dev/null; then
+      WATCH_PID=$(cat "$LOCK/pid" 2>/dev/null || true)
+      if [ -n "$WATCH_PID" ] && kill -0 "$WATCH_PID" 2>/dev/null; then
+        ${pkgs.libnotify}/bin/notify-send \
+          "Steam game is already launching" \
+          "Waiting for app $APP_ID."
+        exit 0
+      fi
+      rm -rf "$LOCK"
+      mkdir "$LOCK"
+    fi
+    WATCH_STARTED=0
+    cleanup_launch() {
+      [ "$WATCH_STARTED" = 1 ] || rm -rf "$LOCK"
+    }
+    trap cleanup_launch EXIT
 
     case "$APP_ID" in
       32440)
@@ -377,15 +505,57 @@ let
       chmod u-w "$PC_CONFIG"
     fi
 
+    ${pkgs.util-linux}/bin/setsid \
+      ${steam-game-watch}/bin/steam-game-watch "$APP_ID" "$LOCK" \
+      >/dev/null 2>&1 &
+    WATCH_STARTED=1
+
+    CONTAINER_RUNNING=$(${pkgs.docker}/bin/docker container inspect \
+      --format '{{.State.Running}}' steam-asahi 2>/dev/null || true)
+    if [ "$CONTAINER_RUNNING" = true ]; then
+      for _ in $(${pkgs.coreutils}/bin/seq 1 100); do
+        [ -p /home/uynx/.local/share/steam-asahi/home/.steam/steam.pipe ] && break
+        sleep 0.1
+      done
+      if [ -p /home/uynx/.local/share/steam-asahi/home/.steam/steam.pipe ]; then
+        ${steam-asahi-remote}/bin/steam-asahi-remote "$APP_ID"
+        exit 0
+      fi
+
+      STEAM_ADDRESS=$(${H} clients -j 2>/dev/null | ${J} -r '
+        [.[] | select(((.class // "") | ascii_downcase) == "steam") | .address][0] // empty
+      ' 2>/dev/null || true)
+      if [ -n "$STEAM_ADDRESS" ]; then
+        ${pkgs.libnotify}/bin/notify-send \
+          "Steam game not launched" \
+          "Steam is still starting; try again in a moment."
+        exit 1
+      fi
+      ${steam-asahi-stop}/bin/steam-asahi-stop
+    fi
+
     exec ${steam-asahi-run}/bin/steam-asahi-run "$APP_ID"
   '';
 
   hypr-close-active = pkgs.writeShellScriptBin "hypr-close-active" ''
     set -eu
 
-    CLASS=$(${H} activewindow -j 2>/dev/null | ${J} -r '.class // ""' 2>/dev/null || true)
+    ACTIVE=$(${H} activewindow -j 2>/dev/null || echo '{}')
+    CLASS=$(printf '%s' "$ACTIVE" | ${J} -r '.class // ""' 2>/dev/null || true)
+    ADDRESS=$(printf '%s' "$ACTIVE" | ${J} -r '.address // ""' 2>/dev/null || true)
     case "$CLASS" in
-      steam|Steam|steam_app_[0-9]*)
+      steam|Steam)
+        exec ${steam-asahi-stop}/bin/steam-asahi-stop
+        ;;
+      steam_app_[0-9]*)
+        KEEP_STEAM=$(${H} clients -j 2>/dev/null | ${J} -r --arg address "$ADDRESS" '
+          any(.[]; (.address != $address) and
+                   (((.class // "") | ascii_downcase) == "steam" or
+                    ((.class // "") | test("^steam_app_[0-9]+$"))))
+        ' 2>/dev/null || echo true)
+        if [ "$KEEP_STEAM" = true ]; then
+          exec ${H} dispatch closewindow "address:$ADDRESS"
+        fi
         exec ${steam-asahi-stop}/bin/steam-asahi-stop
         ;;
       *)
@@ -446,10 +616,6 @@ let
   steam-fuzzel = pkgs.writeShellScriptBin "steam-fuzzel" ''
     ${steam-game-entries}/bin/steam-game-entries
     exec ${pkgs.fuzzel}/bin/fuzzel "$@"
-  '';
-
-  peggle = pkgs.writeShellScriptBin "peggle" ''
-    exec ${steam-launch}/bin/steam-launch 3540
   '';
 
   update-brave-origin = pkgs.writers.writePython3Bin "update-brave-origin" { } ''
@@ -594,7 +760,6 @@ in
       tmuxPlugins.continuum
       monitor-hotplug
       hypr-close-active
-      peggle
       steam-game-entries
       steam-fuzzel
       workspace-switcher
@@ -663,14 +828,6 @@ in
   dconf.settings."org/gnome/desktop/interface".color-scheme = "prefer-dark";
 
   xdg.desktopEntries = {
-    peggle = {
-      name = "Peggle";
-      genericName = "Game";
-      exec = "peggle";
-      icon = "steam";
-      terminal = false;
-      categories = [ "Game" ];
-    };
     steam = {
       name = "Steam";
       genericName = "Games Store";

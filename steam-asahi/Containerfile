@@ -17,6 +17,14 @@ RUN dnf install -y "dnf5-command(copr)" && \
     dnf clean all && \
     rm -rf /var/cache/dnf/* /tmp/* /var/tmp/*
 
+# Fedora's wrapper normally downloads this into mutable user state on first
+# launch. Bake the fixed, hash-verified Valve bootstrap into the image instead.
+RUN python3 -c 'import requests; open("/tmp/steam.tar.gz", "wb").write(requests.get("https://repo.steampowered.com/steam/archive/stable/steam_1.0.0.81.tar.gz").content)' && \
+    echo '1a26b9d7cdace09e04dc86b511e0b9923257f664a5b6cafe6fed5e46d117b4f9  /tmp/steam.tar.gz' | sha256sum -c - && \
+    mkdir -p /opt/fex-steam && \
+    python3 -c 'import tarfile; names=["steam-launcher/steam_subscriber_agreement.txt", "steam-launcher/bin_steam.sh", "steam-launcher/bootstraplinux_ubuntu12_32.tar.xz"]; archive=tarfile.open("/tmp/steam.tar.gz"); archive.extractall("/opt/fex-steam", members=[archive.getmember(name) for name in names], filter="data")' && \
+    rm /tmp/steam.tar.gz
+
 # The Asahi Steam wrapper's Qt bootstrap splash is oversized on this desktop.
 # Steam itself remains unchanged; only the wrapper's transient splash is disabled.
 RUN sed -i 's/^show_splash = True/show_splash = False/' /usr/bin/steam
