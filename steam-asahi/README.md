@@ -39,7 +39,8 @@ Every Steam session starts through the same versioned launcher with:
 
 - `muvm --gpu-mode=venus`, which avoids the native-DRM DXVK black screen;
 - `-cef-disable-gpu`, which avoids the Steam web helper GPU crash loop;
-- one persistent Steam VM, avoiding the Fedora wrapper's close/reopen loop;
+- one explicitly managed Steam VM, avoiding the Fedora wrapper's close/reopen
+  loop;
 - a Hyprland fullscreen rule for every `steam_app_<id>` window;
 - launch-time monitor geometry from Hyprland: HDMI when connected, otherwise
   the focused laptop display, using exact logical width and height with no
@@ -47,7 +48,16 @@ Every Steam session starts through the same versioned launcher with:
 
 Pressing `Alt+Space` regenerates desktop entries from installed Steam manifests
 before opening Fuzzel. Newly installed games therefore appear automatically,
-and every generated entry routes through the shared launcher.
+and every generated entry routes through the shared launcher. Selecting Steam
+starts a normal Venus VM and opens the client. Selecting a game stops any stale
+Steam container, applies its known compatibility settings, and starts a fresh
+hidden Steam session directly with `-silent -applaunch <appid>`; it never asks
+the user to find the game in an already-open Steam window.
+
+Pressing `Alt+Q` while Steam or a `steam_app_<id>` game is active stops the
+entire dedicated container, including Steam, FEX, and muvm. On other windows it
+retains the normal close-window behavior. The next Steam or game selection in
+Fuzzel starts the container and VM again automatically.
 
 Legacy settings are intentionally scoped instead of being forced on unknown
 games:
@@ -55,7 +65,9 @@ games:
 - Peggle Nights (3540): exact-size Wine virtual desktop, windowed game mode,
   and Wine custom cursors disabled so pointer coordinates remain 1:1.
 - LEGO Star Wars: The Complete Saga (32440): exact monitor dimensions written
-  to `pcconfig.txt`; the working Steam compatibility mapping is Proton 10.
+  to `pcconfig.txt`; the launcher enforces the working Proton 10 compatibility
+  mapping before Steam starts. Experimental and Proton 11 render menus but not
+  the 3D scene on this Asahi/Venus stack.
 
 Modern or unknown games receive only the safe common defaults. Add a per-game
 exception to the `case` logic in `hosts/uynx/home.nix` only after proving that

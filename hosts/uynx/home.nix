@@ -152,25 +152,118 @@ let
       xorg-x11-server-Xwayland-24.1.13-1.fc44.aarch64 >/dev/null
   '';
 
-  # One reproducible Steam VM: Venus fixes DXVK black screens on the native DRM
-  # path, while software CEF prevents steamwebhelper's GPU process crash loop.
-  steam-asahi = pkgs.writeShellScriptBin "steam-asahi" ''
+  # Steam, FEX, and muvm all live inside this dedicated container. Stopping the
+  # container is the one reliable process boundary: it cannot leave a second
+  # Steam client, FEX process, or Venus VM behind.
+  steam-asahi-stop = pkgs.writeShellScriptBin "steam-asahi-stop" ''
+    set -eu
+
+    CONTAINER=steam-asahi
+    if [ "$(${pkgs.docker}/bin/docker container inspect \
+      --format '{{.State.Running}}' "$CONTAINER" 2>/dev/null || true)" = true ]; then
+      ${pkgs.docker}/bin/docker container stop --time 5 "$CONTAINER" >/dev/null
+    fi
+
+    # These sockets are runtime-only. Removing them after a full container stop
+    # prevents an interrupted muvm session from blocking the next clean launch.
+    rm -rf \
+      "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/krun" \
+      "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/muvm.lock"
+  '';
+
+  steam-compat-config = pkgs.writers.writePython3Bin "steam-compat-config" { } ''
+    import re
+    import sys
+    from pathlib import Path
+
+    config = Path(
+        "/home/uynx/.local/share/steam-asahi/home/"
+        ".local/share/Steam/config/config.vdf"
+    )
+    app_id, tool = sys.argv[1:3]
+    if not config.is_file():
+        raise SystemExit(0)
+
+    text = config.read_text()
+
+
+    def block_for_key(source, key, low=0, high=None):
+        if high is None:
+            high = len(source)
+        match = re.search(r'"' + re.escape(key) + r'"\s*\{', source[low:high])
+        if not match:
+            return None
+        opening = low + match.end() - 1
+        depth = 0
+        quoted = False
+        escaped = False
+        for pos in range(opening, high):
+            char = source[pos]
+            if quoted:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    quoted = False
+            elif char == '"':
+                quoted = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return opening, pos
+        return None
+
+
+    region = (0, len(text))
+    for key in ("InstallConfigStore", "Software", "Valve", "Steam"):
+        found = block_for_key(text, key, region[0], region[1])
+        if found is None:
+            raise SystemExit(0)
+        region = found
+
+    mapping = block_for_key(text, "CompatToolMapping", region[0], region[1])
+    entry = (
+        f'\n\t\t\t\t\t"{app_id}"\n'
+        "\t\t\t\t\t{\n"
+        f'\t\t\t\t\t\t"name"\t\t"{tool}"\n'
+        '\t\t\t\t\t\t"config"\t\t""\n'
+        '\t\t\t\t\t\t"priority"\t\t"250"\n'
+        "\t\t\t\t\t}\n\t\t\t\t"
+    )
+    if mapping is None:
+        insertion = (
+            '\n\t\t\t\t"CompatToolMapping"\n'
+            "\t\t\t\t{" + entry + "}\n\t\t\t"
+        )
+        text = text[:region[1]] + insertion + text[region[1]:]
+    else:
+        app = block_for_key(text, app_id, mapping[0], mapping[1])
+        if app is None:
+            text = text[:mapping[0] + 1] + entry + text[mapping[0] + 1:]
+        else:
+            body = text[app[0]:app[1]]
+            updated, count = re.subn(
+                r'("name"\s*")[^"]*(")',
+                rf'\g<1>{tool}\g<2>',
+                body,
+                count=1,
+            )
+            if count == 0:
+                updated = body[:1] + f'\n\t"name"\t\t"{tool}"' + body[1:]
+            text = text[:app[0]] + updated + text[app[1]:]
+
+    temporary = config.with_suffix(".vdf.tmp")
+    temporary.write_text(text)
+    temporary.replace(config)
+  '';
+
+  steam-asahi-run = pkgs.writeShellScriptBin "steam-asahi-run" ''
     set -eu
 
     APP_ID=''${1:-}
-    STEAM_ADDRESS=$(${H} clients -j 2>/dev/null | ${J} -r '
-      [.[] | select(((.class // "") | ascii_downcase) == "steam") | .address][0] // empty
-    ' 2>/dev/null || true)
-    if [ -n "$STEAM_ADDRESS" ]; then
-      ${H} dispatch focuswindow "address:$STEAM_ADDRESS" >/dev/null 2>&1 || true
-      if [ -n "$APP_ID" ]; then
-        ${pkgs.libnotify}/bin/notify-send \
-          "Steam is already open" \
-          "Launch app $APP_ID from the existing Steam window."
-      fi
-      exit 0
-    fi
-
     ${steam-asahi-bootstrap}/bin/steam-asahi-bootstrap
 
     STEAM_BIN=/home/uynx/.local/share/steam-asahi/home/.local/share/fex-steam/steam-launcher/bin_steam.sh
@@ -194,11 +287,34 @@ let
       "$STEAM_BIN $STEAM_ARGS"
   '';
 
+  # One reproducible Steam VM: Venus fixes DXVK black screens on the native DRM
+  # path, while software CEF prevents steamwebhelper's GPU process crash loop.
+  steam-asahi = pkgs.writeShellScriptBin "steam-asahi" ''
+    set -eu
+
+    ${steam-asahi-stop}/bin/steam-asahi-stop
+    exec ${steam-asahi-run}/bin/steam-asahi-run "$@"
+  '';
+
   # Match Wine's virtual desktop to the target monitor's exact logical size.
   steam-launch = pkgs.writeShellScriptBin "steam-launch" ''
     set -eu
 
     APP_ID=$1
+    case "$APP_ID" in
+      *[!0-9]*|"") exit 2 ;;
+    esac
+
+    # Never forward through an existing x86 Steam client. A game entry owns one
+    # fresh hidden Steam session, so repeated Fuzzel launches are deterministic.
+    ${steam-asahi-stop}/bin/steam-asahi-stop
+
+    case "$APP_ID" in
+      32440)
+        ${steam-compat-config}/bin/steam-compat-config "$APP_ID" proton_10
+        ;;
+    esac
+
     if ! RESOLUTION=$(${H} monitors -j 2>/dev/null | ${J} -er '
       (if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end)
       | select(.width > 0 and .height > 0 and .scale > 0)
@@ -261,18 +377,21 @@ let
       chmod u-w "$PC_CONFIG"
     fi
 
-    # Fedora Asahi's Steam wrapper starts a new muvm on every invocation.
-    # Starting it while Steam is open makes the existing client close/reopen.
-    if ${H} clients -j 2>/dev/null | ${J} -e '
-      any(.[]; ((.class // "") | ascii_downcase) == "steam")
-    ' >/dev/null 2>&1; then
-      ${pkgs.libnotify}/bin/notify-send \
-        "Steam game prepared" \
-        "Resolution updated. Launch app ''$APP_ID from the open Steam window."
-      exit 0
-    fi
+    exec ${steam-asahi-run}/bin/steam-asahi-run "$APP_ID"
+  '';
 
-    exec ${steam-asahi}/bin/steam-asahi "$APP_ID"
+  hypr-close-active = pkgs.writeShellScriptBin "hypr-close-active" ''
+    set -eu
+
+    CLASS=$(${H} activewindow -j 2>/dev/null | ${J} -r '.class // ""' 2>/dev/null || true)
+    case "$CLASS" in
+      steam|Steam|steam_app_[0-9]*)
+        exec ${steam-asahi-stop}/bin/steam-asahi-stop
+        ;;
+      *)
+        exec ${H} dispatch closewindow active
+        ;;
+    esac
   '';
 
   steam-game-entries = pkgs.writeShellScriptBin "steam-game-entries" ''
@@ -299,6 +418,11 @@ let
       NAME=$(sed -n 's/.*"name"[[:space:]]*"\([^"]*\)".*/\1/p' "$MANIFEST" | head -n 1)
       OWNER=$(sed -n 's/.*"LastOwner"[[:space:]]*"\([0-9]*\)".*/\1/p' "$MANIFEST" | head -n 1)
       [ -n "$APP_ID" ] && [ -n "$NAME" ] && [ "$OWNER" != 0 ] || continue
+      case "$NAME" in
+        Proton\ *|Steam\ Linux\ Runtime*|Steamworks\ Common\ Redistributables)
+          continue
+          ;;
+      esac
 
       printf '%s\n' \
         '[Desktop Entry]' \
@@ -405,6 +529,7 @@ in
       steam-asahi
       steam-asahi-bootstrap
       steam-asahi-doctor
+      steam-asahi-stop
       hyprlandPlugins.hy3
       hyprpaper
       coreutils
@@ -468,6 +593,7 @@ in
       tmuxPlugins.resurrect
       tmuxPlugins.continuum
       monitor-hotplug
+      hypr-close-active
       peggle
       steam-game-entries
       steam-fuzzel
@@ -551,7 +677,11 @@ in
       exec = "${steam-asahi}/bin/steam-asahi";
       icon = "steam";
       terminal = false;
-      categories = [ "Network" "FileTransfer" "Game" ];
+      categories = [
+        "Network"
+        "FileTransfer"
+        "Game"
+      ];
     };
   };
 
