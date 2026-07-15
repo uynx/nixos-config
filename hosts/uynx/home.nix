@@ -319,10 +319,16 @@ let
       STEAM_ARGS="$STEAM_ARGS -silent -applaunch $APP_ID"
     fi
 
-    exec ${pkgs.distrobox}/bin/distrobox enter --no-workdir steam-asahi -- \
-      /usr/bin/muvm --gpu-mode=venus \
-      --execute-pre=/usr/local/libexec/steam-guest-tune -- FEXBash -c \
-      "$STEAM_BIN $STEAM_ARGS"
+    set -- /usr/bin/muvm --gpu-mode=venus
+    if [ "$APP_ID" = 990080 ]; then
+      # Hogwarts can otherwise let the Venus renderer grow beyond unified
+      # memory headroom on this 16 GiB host.
+      set -- "$@" --vram=4096
+    fi
+    set -- "$@" --execute-pre=/usr/local/libexec/steam-guest-tune -- \
+      FEXBash -c "$STEAM_BIN $STEAM_ARGS"
+
+    exec ${pkgs.distrobox}/bin/distrobox enter --no-workdir steam-asahi -- "$@"
   '';
 
   # One reproducible Steam VM: Venus fixes DXVK black screens on the native DRM

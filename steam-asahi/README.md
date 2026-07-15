@@ -76,7 +76,8 @@ games:
   the 3D scene on this Asahi/Venus stack.
 - Hogwarts Legacy (990080): Proton 10 compatibility mapping. Every main Steam
   VM raises guest `vm.max_map_count` to `1048576` before launch; Proton warns
-  the muvm default of `65530` can prevent games from working.
+  the muvm default of `65530` can prevent games from working. It also receives
+  a 4 GiB Venus VRAM budget so the renderer cannot exhaust this 16 GiB host.
 
 Modern or unknown games receive only the safe common defaults. Add a per-game
 exception to the `case` logic in `hosts/uynx/home.nix` only after proving that
