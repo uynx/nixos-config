@@ -564,7 +564,14 @@ let
                     ((.class // "") | test("^steam_app_[0-9]+$"))))
         ' 2>/dev/null || echo true)
         if [ "$KEEP_STEAM" = true ]; then
-          exec ${H} dispatch closewindow "address:$ADDRESS"
+          ${H} dispatch closewindow "address:$ADDRESS" >/dev/null 2>&1 || true
+          for _ in $(${pkgs.coreutils}/bin/seq 1 50); do
+            STILL_OPEN=$(${H} clients -j 2>/dev/null | ${J} -r --arg address "$ADDRESS" '
+              any(.[]; .address == $address)
+            ' 2>/dev/null || echo true)
+            [ "$STILL_OPEN" = true ] || exit 0
+            sleep 0.1
+          done
         fi
         exec ${steam-asahi-stop}/bin/steam-asahi-stop
         ;;
