@@ -48,7 +48,9 @@ Every Steam session starts through the same versioned launcher with:
 
 Pressing `Alt+Space` regenerates desktop entries from installed Steam manifests
 before opening Fuzzel. Newly installed games therefore appear automatically,
-and every generated entry routes through the shared launcher. Selecting Steam
+and every generated entry routes through the shared launcher. Home Manager also
+regenerates them during every `reb`, so preserved manifests restore Fuzzel game
+entries without first opening Steam. Selecting Steam
 focuses its existing window or starts a normal Venus client. Selecting a game
 focuses its existing window, forwards through an open client, or starts a
 hidden Venus session when Steam is closed. A watcher true-fullscreens each new
@@ -63,9 +65,9 @@ windows it retains normal close behavior.
 Legacy settings are intentionally scoped instead of being forced on unknown
 games:
 
-- Peggle Nights (3540): exact-size Wine virtual desktop and Wine custom cursors
-  disabled so pointer coordinates remain 1:1. Game watcher compositor-
-  fullscreens that internal desktop, so no windowed Wine frame remains visible.
+- Peggle Nights (3540): exact-size Wine virtual desktop, game `ScreenMode=1`,
+  and Wine custom cursors disabled so pointer coordinates remain 1:1. Game
+  watcher compositor-fullscreens that desktop too, leaving no windowed layer.
 - LEGO Star Wars: The Complete Saga (32440): exact monitor dimensions written
   to `pcconfig.txt`; the launcher enforces the working Proton 10 compatibility
   mapping before Steam starts. Experimental and Proton 11 render menus but not

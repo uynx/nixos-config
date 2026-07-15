@@ -481,7 +481,7 @@ let
           "$STAMP" "$STAMP" "$RESOLUTION" "$RESOLUTION" >>"$REG_FILE"
       fi
       sed -i -E \
-        -e 's/"ScreenMode"=dword:[0-9a-fA-F]+/"ScreenMode"=dword:00000000/' \
+        -e 's/"ScreenMode"=dword:[0-9a-fA-F]+/"ScreenMode"=dword:00000001/' \
         -e 's/"CustomCursors"=dword:[0-9a-fA-F]+/"CustomCursors"=dword:00000000/' \
         "$REG_FILE"
     fi
@@ -816,6 +816,9 @@ in
         "${home}/ai_memory/journal" \
         "${home}/dotfiles" \
         "${home}/nixos-config"
+    '';
+    activation.generateSteamGameEntries = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      ${steam-game-entries}/bin/steam-game-entries
     '';
   };
 
