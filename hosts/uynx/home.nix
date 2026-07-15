@@ -74,7 +74,6 @@ let
       mesa-dri-drivers-26.1.4-1.fc44.aarch64 \
       mesa-vulkan-drivers-26.1.4-1.fc44.aarch64 \
       steam-0-14.fc44.noarch \
-      pulseaudio-utils-17.0-9.fc44.aarch64 \
       xorg-x11-server-Xwayland-24.1.13-1.fc44.aarch64 >/dev/null
     ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- \
       test -e /usr/lib64/dri/asahi_dri.so
