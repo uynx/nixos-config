@@ -21,7 +21,7 @@ at `~/.local/share/steam-asahi/home`.
 
 The Fedora base image is pinned by digest. The known-good Asahi, FEX, Mesa,
 Steam, PulseAudio, and Xwayland package versions are pinned in `Containerfile`.
-The host configuration also provisions an 8 GiB disk swapfile with zswap so a
+The host configuration also provisions a 16 GiB disk swapfile with zswap so a
 modern game cannot trigger the host OOM killer while its microVM is growing.
 Run the bootstrap directly after intentionally changing those pins:
 
