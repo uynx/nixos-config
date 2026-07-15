@@ -21,6 +21,8 @@ at `~/.local/share/steam-asahi/home`.
 
 The Fedora base image is pinned by digest. The known-good Asahi, FEX, Mesa,
 Steam, PulseAudio, and Xwayland package versions are pinned in `Containerfile`.
+The host configuration also provisions an 8 GiB disk swapfile with zswap so a
+modern game cannot trigger the host OOM killer while its microVM is growing.
 Run the bootstrap directly after intentionally changing those pins:
 
 ```bash
@@ -72,6 +74,9 @@ games:
   to `pcconfig.txt`; the launcher enforces the working Proton 10 compatibility
   mapping before Steam starts. Experimental and Proton 11 render menus but not
   the 3D scene on this Asahi/Venus stack.
+- Hogwarts Legacy (990080): Proton 10 compatibility mapping. Every main Steam
+  VM raises guest `vm.max_map_count` to `1048576` before launch; Proton warns
+  the muvm default of `65530` can prevent games from working.
 
 Modern or unknown games receive only the safe common defaults. Add a per-game
 exception to the `case` logic in `hosts/uynx/home.nix` only after proving that

@@ -93,7 +93,9 @@ let
     CONTAINER=steam-asahi
     LABEL=io.uynx.steam-asahi.config
 
-    if [ ! -f "$SOURCE/Containerfile" ] || [ ! -f "$SOURCE/distrobox.ini" ]; then
+    if [ ! -f "$SOURCE/Containerfile" ] \
+      || [ ! -f "$SOURCE/distrobox.ini" ] \
+      || [ ! -f "$SOURCE/steam-guest-tune" ]; then
       ${pkgs.libnotify}/bin/notify-send \
         "Steam setup unavailable" \
         "Missing the versioned steam-asahi container files."
@@ -103,6 +105,7 @@ let
     CONFIG_HASH=$(
       ${pkgs.coreutils}/bin/sha256sum \
         "$SOURCE/Containerfile" "$SOURCE/distrobox.ini" \
+        "$SOURCE/steam-guest-tune" \
         | ${pkgs.coreutils}/bin/sha256sum \
         | ${pkgs.coreutils}/bin/cut -d' ' -f1
     )
@@ -294,7 +297,7 @@ let
     REMOTE="$STEAM_HOME/root/ubuntu12_32/steam-runtime/amd64/usr/bin/steam-runtime-steam-remote"
     [ -p "$STEAM_HOME/steam.pipe" ] && [ -x "$REMOTE" ]
 
-    exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- \
+    exec ${pkgs.distrobox}/bin/distrobox enter --no-workdir steam-asahi -- \
       /usr/bin/muvm -- FEXBash -c "$REMOTE $URL"
   '';
 
@@ -304,6 +307,7 @@ let
     APP_ID=''${1:-}
     ${steam-asahi-bootstrap}/bin/steam-asahi-bootstrap
     ${steam-compat-config}/bin/steam-compat-config 32440 proton_10
+    ${steam-compat-config}/bin/steam-compat-config 990080 proton_10
 
     STEAM_BIN=/opt/fex-steam/steam-launcher/bin_steam.sh
 
@@ -315,8 +319,9 @@ let
       STEAM_ARGS="$STEAM_ARGS -silent -applaunch $APP_ID"
     fi
 
-    exec ${pkgs.distrobox}/bin/distrobox enter steam-asahi -- \
-      /usr/bin/muvm --gpu-mode=venus -- FEXBash -c \
+    exec ${pkgs.distrobox}/bin/distrobox enter --no-workdir steam-asahi -- \
+      /usr/bin/muvm --gpu-mode=venus \
+      --execute-pre=/usr/local/libexec/steam-guest-tune -- FEXBash -c \
       "$STEAM_BIN $STEAM_ARGS"
   '';
 
@@ -438,7 +443,7 @@ let
     trap cleanup_launch EXIT
 
     case "$APP_ID" in
-      32440)
+      32440 | 990080)
         ${steam-compat-config}/bin/steam-compat-config "$APP_ID" proton_10
         ;;
     esac

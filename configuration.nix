@@ -23,6 +23,11 @@
       systemd-boot.enable = true;
       efi.canTouchEfiVariables = false;
     };
+    kernelParams = [
+      "zswap.enabled=1"
+      "zswap.compressor=zstd"
+      "zswap.shrinker_enabled=1"
+    ];
     extraModprobeConfig = ''
       options hid_apple iso_layout=0
     '';
@@ -63,6 +68,12 @@
   };
 
   nixpkgs.config.allowUnfree = true;
+  swapDevices = [
+    {
+      device = "/swapfile";
+      size = 8192;
+    }
+  ];
   virtualisation.docker.enable = true;
 
   users.users.uynx = {

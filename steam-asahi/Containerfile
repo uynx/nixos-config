@@ -29,4 +29,10 @@ RUN python3 -c 'import requests; open("/tmp/steam.tar.gz", "wb").write(requests.
 # Steam itself remains unchanged; only the wrapper's transient splash is disabled.
 RUN sed -i 's/^show_splash = True/show_splash = False/' /usr/bin/steam
 
+# muvm's --execute-pre accepts an executable path (without arguments). Run
+# this as root in the guest before Steam so large Windows games have enough
+# virtual memory map slots.
+COPY steam-guest-tune /usr/local/libexec/steam-guest-tune
+RUN chmod 0755 /usr/local/libexec/steam-guest-tune
+
 CMD ["/bin/bash"]
