@@ -404,7 +404,11 @@ let
 
     APP_ID=$1
     LOCK=$2
-    CLASS=steam_app_$APP_ID
+    if [ "$APP_ID" = 730 ]; then
+      CLASS=cs2
+    else
+      CLASS=steam_app_$APP_ID
+    fi
     cleanup() { rm -rf "$LOCK"; }
     trap cleanup EXIT
     printf '%s\n' "$$" >"$LOCK/pid"
@@ -421,6 +425,7 @@ let
     if [ -z "$ADDRESS" ]; then
       WINDOWS=$(${H} clients -j 2>/dev/null | ${J} -r '
         any(.[]; ((.class // "") | ascii_downcase) == "steam" or
+                 ((.class // "") | ascii_downcase) == "cs2" or
                  ((.class // "") | test("^steam_app_[0-9]+$")))
       ' 2>/dev/null || echo true)
       [ "$WINDOWS" = true ] || ${steam-asahi-stop}/bin/steam-asahi-stop
@@ -446,6 +451,7 @@ let
 
     WINDOWS=$(${H} clients -j 2>/dev/null | ${J} -r '
       any(.[]; ((.class // "") | ascii_downcase) == "steam" or
+               ((.class // "") | ascii_downcase) == "cs2" or
                ((.class // "") | test("^steam_app_[0-9]+$")))
     ' 2>/dev/null || echo true)
     [ "$WINDOWS" = true ] || ${steam-asahi-stop}/bin/steam-asahi-stop
@@ -460,7 +466,11 @@ let
       *[!0-9]*|"") exit 2 ;;
     esac
 
-    CLASS=steam_app_$APP_ID
+    if [ "$APP_ID" = 730 ]; then
+      CLASS=cs2
+    else
+      CLASS=steam_app_$APP_ID
+    fi
     GAME_ADDRESS=$(${H} clients -j 2>/dev/null | ${J} -r --arg class "$CLASS" '
       [.[] | select(((.class // "") | ascii_downcase) == $class) | .address][0] // empty
     ' 2>/dev/null || true)
@@ -507,6 +517,30 @@ let
     fi
     WIDTH=''${RESOLUTION%x*}
     HEIGHT=''${RESOLUTION#*x}
+
+    if [ "$APP_ID" = 730 ]; then
+      CS2_VIDEO=/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/userdata/483670283/730/local/cfg/cs2_video.txt
+      if ${H} monitors -j 2>/dev/null | ${J} -e 'any(.name == "HDMI-A-1")' >/dev/null; then
+        CS2_MONITOR=1
+      else
+        CS2_MONITOR=0
+      fi
+      CS2_REFRESH=$(${H} monitors -j 2>/dev/null | ${J} -r '
+        (if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end)
+        | .refreshRate | round
+      ' 2>/dev/null || echo 60)
+      if [ -f "$CS2_VIDEO" ]; then
+        sed -i -E \
+          -e "s/(\"setting.defaultres\"[[:space:]]+\")[0-9]+/\1$WIDTH/" \
+          -e "s/(\"setting.defaultresheight\"[[:space:]]+\")[0-9]+/\1$HEIGHT/" \
+          -e "s/(\"setting.refreshrate_numerator\"[[:space:]]+\")[0-9]+/\1$((CS2_REFRESH * 1000))/" \
+          -e 's/("setting.refreshrate_denominator"[[:space:]]+")[0-9]+/\11000/' \
+          -e "s/(\"setting.monitor_index\"[[:space:]]+\")[0-9]+/\1$CS2_MONITOR/" \
+          -e 's/("setting.aspectratiomode"[[:space:]]+")[0-9]+/\11/' \
+          "$CS2_VIDEO"
+      fi
+    fi
+
     COMPAT="/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata"
     PREFIX="$COMPAT/''${APP_ID}/pfx"
     REG_FILE="$PREFIX/user.reg"
@@ -599,10 +633,11 @@ let
       steam|Steam)
         exec ${steam-asahi-stop}/bin/steam-asahi-stop
         ;;
-      steam_app_[0-9]*)
+      steam_app_[0-9]*|cs2)
         KEEP_STEAM=$(${H} clients -j 2>/dev/null | ${J} -r --arg address "$ADDRESS" '
           any(.[]; (.address != $address) and
                    (((.class // "") | ascii_downcase) == "steam" or
+                    ((.class // "") | ascii_downcase) == "cs2" or
                     ((.class // "") | test("^steam_app_[0-9]+$"))))
         ' 2>/dev/null || echo true)
         if [ "$KEEP_STEAM" = true ]; then
