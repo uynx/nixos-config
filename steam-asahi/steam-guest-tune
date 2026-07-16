@@ -2,3 +2,9 @@
 set -eu
 
 printf '%s\n' 1048576 > /proc/sys/vm/max_map_count
+
+# Preserve game minidumps outside muvm's private /tmp so crashes remain
+# inspectable after the guest exits.
+dumps=/home/uynx/.local/share/steam-asahi/home/crash-dumps
+install -d -m 0775 -o 1000 -g 100 "$dumps" /tmp/dumps
+mount --bind "$dumps" /tmp/dumps
