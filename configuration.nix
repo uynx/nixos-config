@@ -12,7 +12,7 @@
       powerOnBoot = true;
       settings = {
         General = {
-          JustWorksRepairing = "always";
+          AutoEnable = true;
         };
       };
     };

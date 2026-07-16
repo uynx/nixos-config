@@ -73,6 +73,11 @@ let
       virglrenderer-1.3.0-1.fc44.aarch64 \
       mesa-dri-drivers-26.1.4-1.fc44.aarch64 \
       mesa-vulkan-drivers-26.1.4-1.fc44.aarch64 \
+      gtk2-2.24.33-25.fc44.aarch64 \
+      ibus-1.5.34-2.fc44.aarch64 \
+      NetworkManager-1.56.1-2.fc44.aarch64 \
+      openal-soft-1.24.2-6.fc44.aarch64 \
+      libvdpau-1.5-11.fc44.aarch64 \
       steam-0-14.fc44.noarch \
       xorg-x11-server-Xwayland-24.1.13-1.fc44.aarch64 >/dev/null
     ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- \
@@ -80,7 +85,7 @@ let
     ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- \
       test -e /usr/lib64/libvulkan_asahi.so
     ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- \
-      test -x /opt/fex-steam/steam-launcher/bin_steam.sh
+      test -x /opt/steam-arm64/steamrtarm64/steam
     printf '%s\n' "Steam Asahi container checks passed."
   '';
 
@@ -152,10 +157,15 @@ let
       virglrenderer-1.3.0-1.fc44.aarch64 \
       mesa-dri-drivers-26.1.4-1.fc44.aarch64 \
       mesa-vulkan-drivers-26.1.4-1.fc44.aarch64 \
+      gtk2-2.24.33-25.fc44.aarch64 \
+      ibus-1.5.34-2.fc44.aarch64 \
+      NetworkManager-1.56.1-2.fc44.aarch64 \
+      openal-soft-1.24.2-6.fc44.aarch64 \
+      libvdpau-1.5-11.fc44.aarch64 \
       steam-0-14.fc44.noarch \
       xorg-x11-server-Xwayland-24.1.13-1.fc44.aarch64 >/dev/null
     ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- \
-      test -x /opt/fex-steam/steam-launcher/bin_steam.sh
+      test -x /opt/steam-arm64/steamrtarm64/steam
   '';
 
   # Steam, FEX, and muvm all live inside this dedicated container. Stopping the
@@ -274,8 +284,7 @@ let
         temporary.replace(config)
   '';
 
-  # Forward commands through Steam's FIFO from a short-lived 4 KiB FEX guest.
-  # This touches neither the running Steam process nor its owning Venus VM.
+  # Forward commands from a short-lived native ARM64 guest to the running client.
   steam-asahi-remote = pkgs.writeShellScriptBin "steam-asahi-remote" ''
     set -eu
 
@@ -293,11 +302,11 @@ let
     esac
 
     STEAM_HOME=/home/uynx/.local/share/steam-asahi/home/.steam
-    REMOTE="$STEAM_HOME/root/ubuntu12_32/steam-runtime/amd64/usr/bin/steam-runtime-steam-remote"
-    [ -p "$STEAM_HOME/steam.pipe" ] && [ -x "$REMOTE" ]
+    STEAM_BIN="$STEAM_HOME/root/steamrtarm64/steam"
+    [ -p "$STEAM_HOME/steam.pipe" ] && [ -x "$STEAM_BIN" ]
 
     exec ${pkgs.distrobox}/bin/distrobox enter --no-workdir steam-asahi -- \
-      /usr/bin/muvm -- FEXBash -c "$REMOTE $URL"
+      /usr/bin/muvm -i -- "$STEAM_BIN" "$URL"
   '';
 
   steam-asahi-run = pkgs.writeShellScriptBin "steam-asahi-run" ''
@@ -306,16 +315,27 @@ let
     APP_ID=''${1:-}
     ${steam-asahi-bootstrap}/bin/steam-asahi-bootstrap
     ${steam-compat-config}/bin/steam-compat-config 32440 proton_10
+    ${steam-compat-config}/bin/steam-compat-config 674940 proton_10
     ${steam-compat-config}/bin/steam-compat-config 990080 proton_10
 
-    STEAM_BIN=/opt/fex-steam/steam-launcher/bin_steam.sh
+    STEAM_ROOT=/home/uynx/.local/share/steam-asahi/home/.local/share/Steam
+    STEAM_HOME=/home/uynx/.local/share/steam-asahi/home/.steam
+    STEAM_BIN="$STEAM_ROOT/steamrtarm64/steam"
 
-    STEAM_ARGS=-cef-disable-gpu
+    if [ ! -x "$STEAM_BIN" ]; then
+      mkdir -p "$STEAM_ROOT"
+      cp -a /opt/steam-arm64/steamrtarm64 "$STEAM_ROOT/"
+    fi
+    mkdir -p "$STEAM_ROOT/package" "$STEAM_HOME"
+    printf '%s\n' publicbeta >"$STEAM_ROOT/package/beta"
+    ln -sfn "$STEAM_ROOT" "$STEAM_HOME/root"
+    ln -sfn "$STEAM_ROOT/linuxarm64" "$STEAM_HOME/sdkarm64"
+    chmod -R u+rwX "$STEAM_ROOT/steamrtarm64"
+
     if [ -n "$APP_ID" ]; then
       case "$APP_ID" in
         *[!0-9]*) exit 2 ;;
       esac
-      STEAM_ARGS="$STEAM_ARGS -silent -applaunch $APP_ID"
     fi
 
     set -- /usr/bin/muvm --gpu-mode=venus
@@ -325,13 +345,19 @@ let
       set -- "$@" --vram=4096
     fi
     set -- "$@" --execute-pre=/usr/local/libexec/steam-guest-tune -- \
-      FEXBash -c "$STEAM_BIN $STEAM_ARGS"
+      "$STEAM_BIN"
+    if [ -n "$APP_ID" ]; then
+      set -- "$@" -silent -applaunch "$APP_ID"
+    fi
 
-    exec ${pkgs.distrobox}/bin/distrobox enter --no-workdir steam-asahi -- "$@"
+    STATUS=0
+    ${pkgs.distrobox}/bin/distrobox enter --no-workdir steam-asahi -- "$@" || STATUS=$?
+    ${steam-asahi-stop}/bin/steam-asahi-stop
+    exit "$STATUS"
   '';
 
-  # One reproducible Steam VM: Venus fixes DXVK black screens on the native DRM
-  # path, while software CEF prevents steamwebhelper's GPU process crash loop.
+  # The native ARM64 client avoids FEX's current Steam UI restart/focus loop;
+  # Windows games still use Proton and FEX inside the same Venus VM.
   steam-asahi = pkgs.writeShellScriptBin "steam-asahi" ''
     set -eu
 
@@ -782,6 +808,7 @@ in
       workspace-switcher
       update-brave-origin
       obs-studio
+      vesktop
     ];
     file = {
       ".config/nvim".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/nvim";
