@@ -316,6 +316,12 @@ let
     STEAM_BIN="$STEAM_HOME/root/steamrtarm64/steam"
     [ -p "$STEAM_HOME/steam.pipe" ] && [ -x "$STEAM_BIN" ]
 
+    if [ "$TARGET" = 730 ]; then
+      exec ${pkgs.distrobox}/bin/distrobox enter --no-workdir steam-asahi -- \
+        /usr/bin/muvm -i -- "$STEAM_BIN" -applaunch "$TARGET" \
+          -condebug +r_csgo_player_occlusion_query 0
+    fi
+
     exec ${pkgs.distrobox}/bin/distrobox enter --no-workdir steam-asahi -- \
       /usr/bin/muvm -i -- "$STEAM_BIN" "$URL"
   '';
@@ -357,7 +363,10 @@ let
     fi
     set -- "$@" --execute-pre=/usr/local/libexec/steam-guest-tune -- \
       "$STEAM_BIN"
-    if [ -n "$APP_ID" ]; then
+    if [ "$APP_ID" = 730 ]; then
+      set -- "$@" -silent -applaunch "$APP_ID" \
+        -condebug +r_csgo_player_occlusion_query 0
+    elif [ -n "$APP_ID" ]; then
       set -- "$@" -silent -applaunch "$APP_ID"
     fi
 
