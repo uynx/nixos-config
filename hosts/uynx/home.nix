@@ -762,6 +762,14 @@ in
     username = "uynx";
     homeDirectory = home;
     stateVersion = "26.05";
+    file.".local/share/steam-asahi/home/.local/share/Steam/steamapps/common/Counter-Strike Global Offensive/game/csgo/cfg/autoexec.cfg" =
+      {
+        force = true;
+        text = ''
+          // Venus can lose CS2's player-occlusion query pool during match load.
+          r_csgo_player_occlusion_query 0
+        '';
+      };
     sessionVariables = {
       EDITOR = "nvim";
       VISUAL = "nvim";
