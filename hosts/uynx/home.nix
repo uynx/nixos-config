@@ -639,7 +639,11 @@ let
     CLASS=$(printf '%s' "$ACTIVE" | ${J} -r '.class // ""' 2>/dev/null || true)
     ADDRESS=$(printf '%s' "$ACTIVE" | ${J} -r '.address // ""' 2>/dev/null || true)
     case "$CLASS" in
-      steam|Steam|steam_app_[0-9]*|cs2)
+      steam|Steam)
+        # Keep the shared client alive; quit it through Steam's own menu.
+        exit 0
+        ;;
+      steam_app_[0-9]*|cs2)
         if [ -n "$ADDRESS" ]; then
           ${H} dispatch closewindow "address:$ADDRESS" >/dev/null 2>&1 || true
           for _ in $(${pkgs.coreutils}/bin/seq 1 50); do
@@ -650,6 +654,10 @@ let
             sleep 0.1
           done
         fi
+        STEAM_OPEN=$(${H} clients -j 2>/dev/null | ${J} -r '
+          any(.[]; ((.class // "") | ascii_downcase) == "steam")
+        ' 2>/dev/null || echo false)
+        [ "$STEAM_OPEN" = true ] && exit 0
         exec ${steam-asahi-stop}/bin/steam-asahi-stop
         ;;
       *)
