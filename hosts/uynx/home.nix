@@ -787,6 +787,7 @@ in
           r_csgo_player_occlusion_query 0
         '';
       };
+    file.".local/bin/hypr-close-active".source = "${hypr-close-active}/bin/hypr-close-active";
     sessionVariables = {
       EDITOR = "nvim";
       VISUAL = "nvim";
