@@ -630,23 +630,14 @@ let
     CLASS=$(printf '%s' "$ACTIVE" | ${J} -r '.class // ""' 2>/dev/null || true)
     ADDRESS=$(printf '%s' "$ACTIVE" | ${J} -r '.address // ""' 2>/dev/null || true)
     case "$CLASS" in
-      steam|Steam)
-        exec ${steam-asahi-stop}/bin/steam-asahi-stop
-        ;;
-      steam_app_[0-9]*|cs2)
-        KEEP_STEAM=$(${H} clients -j 2>/dev/null | ${J} -r --arg address "$ADDRESS" '
-          any(.[]; (.address != $address) and
-                   (((.class // "") | ascii_downcase) == "steam" or
-                    ((.class // "") | ascii_downcase) == "cs2" or
-                    ((.class // "") | test("^steam_app_[0-9]+$"))))
-        ' 2>/dev/null || echo true)
-        if [ "$KEEP_STEAM" = true ]; then
+      steam|Steam|steam_app_[0-9]*|cs2)
+        if [ -n "$ADDRESS" ]; then
           ${H} dispatch closewindow "address:$ADDRESS" >/dev/null 2>&1 || true
           for _ in $(${pkgs.coreutils}/bin/seq 1 50); do
             STILL_OPEN=$(${H} clients -j 2>/dev/null | ${J} -r --arg address "$ADDRESS" '
               any(.[]; .address == $address)
             ' 2>/dev/null || echo true)
-            [ "$STILL_OPEN" = true ] || exit 0
+            [ "$STILL_OPEN" = true ] || break
             sleep 0.1
           done
         fi
