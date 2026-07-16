@@ -3,12 +3,18 @@
   pkgs,
   lib,
   pkgs-stable,
+  inputs,
   ...
 }:
 
 let
   H = "${pkgs.hyprland}/bin/hyprctl";
   J = "${pkgs.jq}/bin/jq";
+  x86-pkgs = import inputs.nixpkgs {
+    system = "x86_64-linux";
+    config.allowUnfree = true;
+  };
+  x86-libgcc = x86-pkgs.stdenv.cc.cc.lib;
   workspace-switcher = pkgs.writeShellScriptBin "workspace-switcher" ''
     KEY=$1
     ACTION=''${2:-goto}
@@ -78,7 +84,10 @@ let
       NetworkManager-1.56.1-2.fc44.aarch64 \
       openal-soft-1.24.2-6.fc44.aarch64 \
       libvdpau-1.5-11.fc44.aarch64 \
+      libX11-devel-1.8.13-1.fc44.aarch64 \
+      mesa-libGL-devel-26.1.4-1.fc44.aarch64 \
       steam-0-14.fc44.noarch \
+      vulkan-loader-devel-1.4.341.0-1.fc44.aarch64 \
       xorg-x11-server-Xwayland-24.1.13-1.fc44.aarch64 >/dev/null
     ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- \
       test -e /usr/lib64/dri/asahi_dri.so
@@ -86,6 +95,8 @@ let
       test -e /usr/lib64/libvulkan_asahi.so
     ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- \
       test -x /opt/steam-arm64/steamrtarm64/steam
+    ${pkgs.distrobox}/bin/distrobox enter "$CONTAINER" -- \
+      test -x /usr/local/bin/box64
     printf '%s\n' "Steam Asahi container checks passed."
   '';
 
@@ -315,7 +326,7 @@ let
     APP_ID=''${1:-}
     ${steam-asahi-bootstrap}/bin/steam-asahi-bootstrap
     ${steam-compat-config}/bin/steam-compat-config 32440 proton_10
-    ${steam-compat-config}/bin/steam-compat-config 674940 proton_10
+    ${steam-compat-config}/bin/steam-compat-config 674940 box64_stickfight
     ${steam-compat-config}/bin/steam-compat-config 990080 proton_10
 
     STEAM_ROOT=/home/uynx/.local/share/steam-asahi/home/.local/share/Steam
@@ -417,11 +428,13 @@ let
     fi
 
     ${H} dispatch focuswindow "address:$ADDRESS" >/dev/null 2>&1 || true
-    FULLSCREEN=$(${H} clients -j 2>/dev/null | ${J} -r --arg address "$ADDRESS" '
-      [.[] | select(.address == $address) | .fullscreen][0] // 0
-    ' 2>/dev/null || echo 0)
-    if [ "$FULLSCREEN" = 0 ]; then
-      ${H} dispatch fullscreen 0 >/dev/null 2>&1 || true
+    if [ "$APP_ID" != 674940 ]; then
+      FULLSCREEN=$(${H} clients -j 2>/dev/null | ${J} -r --arg address "$ADDRESS" '
+        [.[] | select(.address == $address) | .fullscreen][0] // 0
+      ' 2>/dev/null || echo 0)
+      if [ "$FULLSCREEN" = 0 ]; then
+        ${H} dispatch fullscreen 0 >/dev/null 2>&1 || true
+      fi
     fi
 
     while ${H} clients -j 2>/dev/null | ${J} -e --arg class "$CLASS" '
@@ -477,18 +490,23 @@ let
       32440 | 990080)
         ${steam-compat-config}/bin/steam-compat-config "$APP_ID" proton_10
         ;;
+      674940)
+        ${steam-compat-config}/bin/steam-compat-config "$APP_ID" box64_stickfight
+        ;;
     esac
 
-    if ! RESOLUTION=$(${H} monitors -j 2>/dev/null | ${J} -er '
+    if ! DISPLAY_CONFIG=$(${H} monitors -j 2>/dev/null | ${J} -er '
       (if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end)
       | select(.width > 0 and .height > 0 and .scale > 0)
-      | "\((.width / .scale) | floor)x\((.height / .scale) | floor)"
+      | "\(.id) \((.width / .scale) | floor)x\((.height / .scale) | floor)"
     ' 2>/dev/null); then
       ${pkgs.libnotify}/bin/notify-send \
         "Steam game not launched" \
         "Could not read the target monitor resolution from Hyprland."
       exit 1
     fi
+    MONITOR_ID=''${DISPLAY_CONFIG%% *}
+    RESOLUTION=''${DISPLAY_CONFIG#* }
     WIDTH=''${RESOLUTION%x*}
     HEIGHT=''${RESOLUTION#*x}
     COMPAT="/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata"
@@ -520,6 +538,23 @@ let
         -e 's/"ScreenMode"=dword:[0-9a-fA-F]+/"ScreenMode"=dword:00000001/' \
         -e 's/"CustomCursors"=dword:[0-9a-fA-F]+/"CustomCursors"=dword:00000000/' \
         "$REG_FILE"
+    fi
+
+    STICK_REG=$REG_FILE
+    STICK_RESOLUTION=/home/uynx/.local/share/steam-asahi/stickfight-resolution
+    if [ "$APP_ID" = 674940 ]; then
+      printf '%s %s\n' "$WIDTH" "$HEIGHT" >"$STICK_RESOLUTION"
+    fi
+    if [ "$APP_ID" = 674940 ] && [ -f "$STICK_REG" ]; then
+      WIDTH_HEX=$(printf '%08x' "$WIDTH")
+      HEIGHT_HEX=$(printf '%08x' "$HEIGHT")
+      MONITOR_HEX=$(printf '%08x' "$MONITOR_ID")
+      sed -i -E \
+        -e "s/\"Screenmanager Is Fullscreen mode_h3981298716\"=dword:[0-9a-fA-F]+/\"Screenmanager Is Fullscreen mode_h3981298716\"=dword:00000000/" \
+        -e "s/\"Screenmanager Resolution Height_h2627697771\"=dword:[0-9a-fA-F]+/\"Screenmanager Resolution Height_h2627697771\"=dword:$HEIGHT_HEX/" \
+        -e "s/\"Screenmanager Resolution Width_h182942802\"=dword:[0-9a-fA-F]+/\"Screenmanager Resolution Width_h182942802\"=dword:$WIDTH_HEX/" \
+        -e "s/\"UnitySelectMonitor_h17969598\"=dword:[0-9a-fA-F]+/\"UnitySelectMonitor_h17969598\"=dword:$MONITOR_HEX/" \
+        "$STICK_REG"
     fi
 
     PC_CONFIG=
@@ -828,6 +863,79 @@ in
       ".config/tmux".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/tmux";
       ".agents/skills".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/skills";
       ".agents/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/AGENTS.md";
+      ".local/share/steam-asahi/home/.local/share/Steam/compatibilitytools.d/Box64-StickFight/compatibilitytool.vdf".text =
+        ''
+          "compatibilitytools"
+          {
+            "compat_tools"
+            {
+              "box64_stickfight"
+              {
+                "install_path" "."
+                "display_name" "Box64 Stick Fight"
+                "from_oslist" "windows"
+                "to_oslist" "linux"
+              }
+            }
+          }
+        '';
+      ".local/share/steam-asahi/home/.local/share/Steam/compatibilitytools.d/Box64-StickFight/toolmanifest.vdf".text =
+        ''
+          "manifest"
+          {
+            "commandline" "/proton run"
+            "commandline_getnativepath" "/proton getnativepath"
+            "commandline_getcompatpath" "/proton getcompatpath"
+            "commandline_waitforexitandrun" "/proton waitforexitandrun"
+          }
+        '';
+      ".local/share/steam-asahi/home/.local/share/Steam/compatibilitytools.d/Box64-StickFight/proton" = {
+        executable = true;
+        text = ''
+          #!/bin/sh
+          set -eu
+
+          ACTION=''${1:-run}
+          [ "$#" -eq 0 ] || shift
+          case "$ACTION" in
+            getnativepath|getcompatpath)
+              printf '%s\n' "''${1:-}"
+              exit 0
+              ;;
+            run|waitforexitandrun)
+              ;;
+            *)
+              exit 2
+              ;;
+          esac
+          [ "$#" -gt 0 ]
+          GAME=$1
+          WIDTH=1280
+          HEIGHT=720
+          RESOLUTION_FILE=/home/uynx/.local/share/steam-asahi/stickfight-resolution
+          if [ -r "$RESOLUTION_FILE" ]; then
+            read -r WIDTH HEIGHT <"$RESOLUTION_FILE"
+          fi
+
+          export MESA_LOADER_DRIVER_OVERRIDE=zink
+          export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/virtio_icd.aarch64.json
+          PROTON=/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/common/Proton\ 10.0/files
+          export WINEPREFIX=/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata/674940/pfx
+          export WINEDEBUG=-all
+          export WINEDLLPATH="$PROTON/lib/vkd3d:$PROTON/lib/wine"
+          export LD_LIBRARY_PATH="$PROTON/lib/x86_64-linux-gnu:$PROTON/lib/i386-linux-gnu:${x86-libgcc}/lib:/usr/lib64:/usr/lib:''${LD_LIBRARY_PATH:-}"
+          unset LD_PRELOAD
+          export SteamAppId=674940
+          export SteamGameId=674940
+          export BOX64_DYNAREC_STRONGMEM=1
+          export BOX64_DYNAREC_BIGBLOCK=0
+          export BOX64_NOGTK=1
+
+          exec /usr/local/bin/box64 "$PROTON/bin/wine" \
+            "$GAME" -force-d3d9 -popupwindow \
+            -screen-width "$WIDTH" -screen-height "$HEIGHT" -screen-fullscreen 0
+        '';
+      };
       ".config/cava/config".text = ''
         [general]
         bars = 16

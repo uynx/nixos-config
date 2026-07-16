@@ -16,8 +16,49 @@ RUN dnf install -y "dnf5-command(copr)" && \
       NetworkManager-1.56.1-2.fc44.aarch64 \
       openal-soft-1.24.2-6.fc44.aarch64 \
       libvdpau-1.5-11.fc44.aarch64 \
+      fontconfig-devel-2.17.0-4.fc44.aarch64 \
+      freetype-devel-2.14.3-1.fc44.aarch64 \
+      harfbuzz-devel-14.1.0-2.fc44.aarch64 \
+      libX11-devel-1.8.13-1.fc44.aarch64 \
+      libXcomposite-devel-0.4.6-7.fc44.aarch64 \
+      libXcursor-devel-1.2.3-4.fc44.aarch64 \
+      libXext-devel-1.3.6-5.fc44.aarch64 \
+      libXfixes-devel-6.0.1-7.fc44.aarch64 \
+      libXi-devel-1.8.3-1.fc44.aarch64 \
+      libXinerama-devel-1.1.5-10.fc44.aarch64 \
+      libXrandr-devel-1.5.4-7.fc44.aarch64 \
+      libXrender-devel-0.9.12-4.fc44.aarch64 \
+      libXxf86vm-devel-1.1.6-4.fc44.aarch64 \
+      libxkbcommon-devel-1.13.1-2.fc44.aarch64 \
+      mesa-libGL-devel-26.1.4-1.fc44.aarch64 \
       steam-0-14.fc44.noarch \
+      vulkan-loader-devel-1.4.341.0-1.fc44.aarch64 \
       xorg-x11-server-Xwayland-24.1.13-1.fc44.aarch64 && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf/* /tmp/* /var/tmp/*
+
+# FEX currently stalls this game's 32-bit Unity 5.6 player. Build Box64 with
+# Box32 so Proton's Steam bridge and Wine helpers can run through Venus/Zink.
+RUN dnf install -y \
+      cmake-4.3.0-1.fc44.aarch64 \
+      gcc-16.1.1-2.fc44.aarch64 \
+      gcc-c++-16.1.1-2.fc44.aarch64 \
+      make-4.4.1-12.fc44.aarch64 && \
+    python3 -c 'import requests; open("/tmp/box64.tar.gz", "wb").write(requests.get("https://github.com/ptitSeb/box64/archive/a107c2a52b97ae0a40b8e9f1dee0f9d1456bba2e.tar.gz").content)' && \
+    echo '05aae4d7e310780a80abe038bb081697f6525ac8a246c07e80e1790954182ca5  /tmp/box64.tar.gz' | sha256sum -c - && \
+    mkdir -p /tmp/box64 && \
+    python3 -c 'import tarfile; archive=tarfile.open("/tmp/box64.tar.gz"); archive.extractall("/tmp/box64", filter="data")' && \
+    cmake \
+      -S /tmp/box64/box64-a107c2a52b97ae0a40b8e9f1dee0f9d1456bba2e \
+      -B /tmp/box64/build \
+      -D M1=ON \
+      -D BOX32=ON \
+      -D NOGIT=ON \
+      -D CMAKE_BUILD_TYPE=Release \
+      -D CMAKE_INSTALL_PREFIX=/usr/local && \
+    cmake --build /tmp/box64/build --parallel && \
+    cmake --install /tmp/box64/build && \
+    dnf remove -y cmake gcc gcc-c++ make && \
     dnf clean all && \
     rm -rf /var/cache/dnf/* /tmp/* /var/tmp/*
 
