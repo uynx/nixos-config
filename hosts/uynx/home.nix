@@ -495,18 +495,16 @@ let
         ;;
     esac
 
-    if ! DISPLAY_CONFIG=$(${H} monitors -j 2>/dev/null | ${J} -er '
+    if ! RESOLUTION=$(${H} monitors -j 2>/dev/null | ${J} -er '
       (if any(.name == "HDMI-A-1") then .[] | select(.name == "HDMI-A-1") else .[] | select(.focused) end)
       | select(.width > 0 and .height > 0 and .scale > 0)
-      | "\(.id) \((.width / .scale) | floor)x\((.height / .scale) | floor)"
+      | "\((.width / .scale) | floor)x\((.height / .scale) | floor)"
     ' 2>/dev/null); then
       ${pkgs.libnotify}/bin/notify-send \
         "Steam game not launched" \
         "Could not read the target monitor resolution from Hyprland."
       exit 1
     fi
-    MONITOR_ID=''${DISPLAY_CONFIG%% *}
-    RESOLUTION=''${DISPLAY_CONFIG#* }
     WIDTH=''${RESOLUTION%x*}
     HEIGHT=''${RESOLUTION#*x}
     COMPAT="/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/compatdata"
@@ -538,23 +536,6 @@ let
         -e 's/"ScreenMode"=dword:[0-9a-fA-F]+/"ScreenMode"=dword:00000001/' \
         -e 's/"CustomCursors"=dword:[0-9a-fA-F]+/"CustomCursors"=dword:00000000/' \
         "$REG_FILE"
-    fi
-
-    STICK_REG=$REG_FILE
-    STICK_RESOLUTION=/home/uynx/.local/share/steam-asahi/stickfight-resolution
-    if [ "$APP_ID" = 674940 ]; then
-      printf '%s %s\n' "$WIDTH" "$HEIGHT" >"$STICK_RESOLUTION"
-    fi
-    if [ "$APP_ID" = 674940 ] && [ -f "$STICK_REG" ]; then
-      WIDTH_HEX=$(printf '%08x' "$WIDTH")
-      HEIGHT_HEX=$(printf '%08x' "$HEIGHT")
-      MONITOR_HEX=$(printf '%08x' "$MONITOR_ID")
-      sed -i -E \
-        -e "s/\"Screenmanager Is Fullscreen mode_h3981298716\"=dword:[0-9a-fA-F]+/\"Screenmanager Is Fullscreen mode_h3981298716\"=dword:00000000/" \
-        -e "s/\"Screenmanager Resolution Height_h2627697771\"=dword:[0-9a-fA-F]+/\"Screenmanager Resolution Height_h2627697771\"=dword:$HEIGHT_HEX/" \
-        -e "s/\"Screenmanager Resolution Width_h182942802\"=dword:[0-9a-fA-F]+/\"Screenmanager Resolution Width_h182942802\"=dword:$WIDTH_HEX/" \
-        -e "s/\"UnitySelectMonitor_h17969598\"=dword:[0-9a-fA-F]+/\"UnitySelectMonitor_h17969598\"=dword:$MONITOR_HEX/" \
-        "$STICK_REG"
     fi
 
     PC_CONFIG=
@@ -910,13 +891,6 @@ in
           esac
           [ "$#" -gt 0 ]
           GAME=$1
-          WIDTH=1280
-          HEIGHT=720
-          RESOLUTION_FILE=/home/uynx/.local/share/steam-asahi/stickfight-resolution
-          if [ -r "$RESOLUTION_FILE" ]; then
-            read -r WIDTH HEIGHT <"$RESOLUTION_FILE"
-          fi
-
           export MESA_LOADER_DRIVER_OVERRIDE=zink
           export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/virtio_icd.aarch64.json
           PROTON=/home/uynx/.local/share/steam-asahi/home/.local/share/Steam/steamapps/common/Proton\ 10.0/files
@@ -932,8 +906,7 @@ in
           export BOX64_NOGTK=1
 
           exec /usr/local/bin/box64 "$PROTON/bin/wine" \
-            "$GAME" -force-d3d9 -popupwindow \
-            -screen-width "$WIDTH" -screen-height "$HEIGHT" -screen-fullscreen 0
+            "$GAME" -force-d3d9 -popupwindow -screen-fullscreen 0
         '';
       };
       ".config/cava/config".text = ''
