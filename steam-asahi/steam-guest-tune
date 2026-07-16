@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-printf '%s\n' 1048576 > /proc/sys/vm/max_map_count
+printf '%s\n' 2147483642 > /proc/sys/vm/max_map_count
 
 # Preserve game minidumps outside muvm's private /tmp so crashes remain
 # inspectable after the guest exits.
