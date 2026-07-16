@@ -787,6 +787,12 @@ in
           r_csgo_player_occlusion_query 0
         '';
       };
+    file.".local/share/steam-asahi/home/.fex-emu/AppConfig/cs2.json" = {
+      force = true;
+      text = builtins.toJSON {
+        Config.StrictInProcessSplitLocks = "1";
+      };
+    };
     file.".local/bin/hypr-close-active".source = "${hypr-close-active}/bin/hypr-close-active";
     sessionVariables = {
       EDITOR = "nvim";
