@@ -186,16 +186,33 @@ let
     set -eu
 
     CONTAINER=steam-asahi
+    RUNTIME_DIR=''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
     if [ "$(${pkgs.docker}/bin/docker container inspect \
       --format '{{.State.Running}}' "$CONTAINER" 2>/dev/null || true)" = true ]; then
       ${pkgs.docker}/bin/docker container stop --time 5 "$CONTAINER" >/dev/null
     fi
 
+    # Launch watchers live outside the container. Stop them and remove their
+    # locks so a fully stopped game cannot block its next launch.
+    for LOCK in "$RUNTIME_DIR"/steam-asahi-launch-*; do
+      [ -d "$LOCK" ] || continue
+      WATCH_PID=$(cat "$LOCK/pid" 2>/dev/null || true)
+      if [ -n "$WATCH_PID" ] && [ "$WATCH_PID" != "$PPID" ]; then
+        WATCH_ARGS=$(${pkgs.procps}/bin/ps -p "$WATCH_PID" -o args= 2>/dev/null || true)
+        case "$WATCH_ARGS" in
+          *steam-game-watch*"$LOCK"*) kill "$WATCH_PID" 2>/dev/null || true ;;
+        esac
+      fi
+      rm -rf "$LOCK"
+    done
+
     # These sockets are runtime-only. Removing them after a full container stop
     # prevents an interrupted muvm session from blocking the next clean launch.
     rm -rf \
-      "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/krun" \
-      "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/muvm.lock"
+      "$RUNTIME_DIR/krun" \
+      "$RUNTIME_DIR/muvm.lock"
+    rm -f \
+      /home/uynx/.local/share/steam-asahi/home/.cache/steam-asahi/open-url.pipe
   '';
 
   # Wine and the ARM64 Steam client run inside muvm, where Distrobox's normal
@@ -684,27 +701,10 @@ let
 
     ACTIVE=$(${H} activewindow -j 2>/dev/null || echo '{}')
     CLASS=$(printf '%s' "$ACTIVE" | ${J} -r '.class // ""' 2>/dev/null || true)
-    ADDRESS=$(printf '%s' "$ACTIVE" | ${J} -r '.address // ""' 2>/dev/null || true)
     case "$CLASS" in
-      steam|Steam)
-        # Keep the shared client alive; quit it through Steam's own menu.
-        exit 0
-        ;;
-      steam_app_[0-9]*|cs2)
-        if [ -n "$ADDRESS" ]; then
-          ${H} dispatch closewindow "address:$ADDRESS" >/dev/null 2>&1 || true
-          for _ in $(${pkgs.coreutils}/bin/seq 1 50); do
-            STILL_OPEN=$(${H} clients -j 2>/dev/null | ${J} -r --arg address "$ADDRESS" '
-              any(.[]; .address == $address)
-            ' 2>/dev/null || echo true)
-            [ "$STILL_OPEN" = true ] || break
-            sleep 0.1
-          done
-        fi
-        STEAM_OPEN=$(${H} clients -j 2>/dev/null | ${J} -r '
-          any(.[]; ((.class // "") | ascii_downcase) == "steam")
-        ' 2>/dev/null || echo false)
-        [ "$STEAM_OPEN" = true ] && exit 0
+      steam|Steam|steam_app_[0-9]*|cs2)
+        # The VM is the reliable process boundary. Closing only the XWayland
+        # window can leave Proton and the game running headless.
         exec ${steam-asahi-stop}/bin/steam-asahi-stop
         ;;
       *)
