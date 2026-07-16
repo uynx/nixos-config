@@ -198,6 +198,36 @@ let
       "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/muvm.lock"
   '';
 
+  # Wine and the ARM64 Steam client run inside muvm, where Distrobox's normal
+  # xdg-open host forwarding cannot cross the VM boundary. Pass web URLs through
+  # a FIFO in the shared Steam home and open them with the NixOS desktop handler.
+  steam-guest-open = pkgs.writeShellScript "steam-guest-open" ''
+    set -eu
+
+    FIFO=/home/uynx/.local/share/steam-asahi/home/.cache/steam-asahi/open-url.pipe
+    [ "$#" = 1 ] || exit 2
+    case "$1" in
+      http://* | https://*) ;;
+      *) exit 2 ;;
+    esac
+    [ -p "$FIFO" ] || exit 1
+    printf '%s\n' "$1" >"$FIFO"
+  '';
+
+  steam-url-bridge = pkgs.writeShellScriptBin "steam-url-bridge" ''
+    set -eu
+
+    FIFO=$1
+    exec 3<>"$FIFO"
+    while IFS= read -r URL <&3; do
+      case "$URL" in
+        http://* | https://*)
+          ${pkgs.xdg-utils}/bin/xdg-open "$URL" >/dev/null 2>&1 || true
+          ;;
+      esac
+    done <"$FIFO"
+  '';
+
   steam-compat-config = pkgs.writers.writePython3Bin "steam-compat-config" { } ''
     import re
     import sys
@@ -338,6 +368,21 @@ let
     STEAM_ROOT=/home/uynx/.local/share/steam-asahi/home/.local/share/Steam
     STEAM_HOME=/home/uynx/.local/share/steam-asahi/home/.steam
     STEAM_BIN="$STEAM_ROOT/steamrtarm64/steam"
+    GUEST_BIN=/home/uynx/.local/share/steam-asahi/home/.local/bin
+    URL_FIFO=/home/uynx/.local/share/steam-asahi/home/.cache/steam-asahi/open-url.pipe
+
+    mkdir -p "$GUEST_BIN" "$(dirname "$URL_FIFO")"
+    install -m 0755 ${steam-guest-open} "$GUEST_BIN/xdg-open"
+    rm -f "$URL_FIFO"
+    mkfifo -m 0600 "$URL_FIFO"
+    ${steam-url-bridge}/bin/steam-url-bridge "$URL_FIFO" &
+    URL_BRIDGE_PID=$!
+    cleanup_url_bridge() {
+      kill "$URL_BRIDGE_PID" 2>/dev/null || true
+      wait "$URL_BRIDGE_PID" 2>/dev/null || true
+      rm -f "$URL_FIFO"
+    }
+    trap cleanup_url_bridge EXIT INT TERM HUP
 
     if [ ! -x "$STEAM_BIN" ]; then
       mkdir -p "$STEAM_ROOT"
@@ -355,7 +400,10 @@ let
       esac
     fi
 
-    set -- /usr/bin/muvm --gpu-mode=venus
+    set -- /usr/bin/muvm \
+      -e "BROWSER=$GUEST_BIN/xdg-open" \
+      -e "PATH=$GUEST_BIN:$PATH" \
+      --gpu-mode=venus
     if [ "$APP_ID" = 990080 ]; then
       # Hogwarts can otherwise let the Venus renderer grow beyond unified
       # memory headroom on this 16 GiB host.
