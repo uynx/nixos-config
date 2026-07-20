@@ -1029,6 +1029,11 @@ in
         focus_automatic_continuous = 0
         focus_absolute = 40
       '';
+      ".config/hu.irl.cameractrls/usb-046d_HD_Pro_Webcam_C920_2974D69F-video-index0.ini".text = ''
+        [preset_1]
+        focus_automatic_continuous = 0
+        focus_absolute = 40
+      '';
     };
     activation.copilotBridge = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       AUTH_DB="${home}/.config/github-copilot/auth.db"
