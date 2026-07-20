@@ -840,6 +840,7 @@ in
       VISUAL = "nvim";
       AGY_CLI_DISABLE_AUTO_UPDATE = "true";
       PROTON_PASS_KEY_PROVIDER = "fs";
+      GSK_RENDERER = "gl";
     };
     pointerCursor = {
       enable = true;
