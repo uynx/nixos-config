@@ -30,6 +30,7 @@
     ];
     extraModprobeConfig = ''
       options hid_apple iso_layout=0
+      options uvcvideo quirks=0x80
     '';
   };
 
