@@ -924,6 +924,8 @@ in
       update-brave-origin
       obs-studio
       vesktop
+      cameractrls-gtk4
+      v4l-utils
     ];
     file = {
       ".config/nvim".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/nvim";
@@ -1020,6 +1022,11 @@ in
         raw_target = /dev/stdout
         data_format = ascii
         ascii_max_range = 7
+      '';
+      ".config/hu.irl.cameractrls/usb-046d_HD_Pro_Webcam_C920_7BE3D69F-video-index0.ini".text = ''
+        [preset_1]
+        focus_automatic_continuous = 0
+        focus_absolute = 40
       '';
     };
     activation.copilotBridge = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
@@ -1240,6 +1247,21 @@ in
         merge.conflictstyle = "zdiff3";
         rerere.enabled = true;
       };
+    };
+  };
+
+  systemd.user.services.cameractrlsd = {
+    Unit = {
+      Description = "CameraCtrls daemon - restore control values";
+      After = [ "graphical-session.target" ];
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = "${pkgs.cameractrls}/bin/cameractrlsd";
+      Restart = "on-failure";
+    };
+    Install = {
+      WantedBy = [ "graphical-session.target" ];
     };
   };
 }

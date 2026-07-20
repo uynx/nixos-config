@@ -129,6 +129,8 @@
     gnome.gnome-keyring.enable = true;
   };
 
+  virtualisation.waydroid.enable = true;
+  virtualisation.waydroid.package = pkgs.waydroid-nftables;
   security.pam.services.greetd.enableGnomeKeyring = true;
   fonts.packages = with pkgs; [
     nerd-fonts.hack
