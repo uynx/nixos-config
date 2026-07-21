@@ -819,6 +819,33 @@ let
     print("Updated brave-origin.nix successfully!")
   '';
 
+  update-antigravity = pkgs.writeShellScriptBin "update-antigravity" ''
+    set -eu
+    TARGET_DIR="$HOME/.local/share/antigravity"
+    if [ "$#" -lt 1 ]; then
+      echo "Usage: update-antigravity <tarball_url_or_file_path>"
+      exit 1
+    fi
+    SOURCE="$1"
+    mkdir -p "$TARGET_DIR"
+    TMP=$(mktemp -d)
+    trap 'rm -rf "$TMP"' EXIT
+    if [[ "$SOURCE" =~ ^https?:// ]]; then
+      echo "Downloading Antigravity from $SOURCE..."
+      ${pkgs.curl}/bin/curl -sSL "$SOURCE" -o "$TMP/antigravity.tar.gz"
+      TARFILE="$TMP/antigravity.tar.gz"
+    else
+      TARFILE="$SOURCE"
+    fi
+    echo "Extracting to $TARGET_DIR..."
+    ${pkgs.gnutar}/bin/tar -xzf "$TARFILE" -C "$TARGET_DIR" --strip-components=1
+    echo "Antigravity extracted successfully to $TARGET_DIR."
+  '';
+
+  codex = pkgs.writeShellScriptBin "codex" ''
+    exec ${pkgs.nodejs}/bin/npx -y @openai/codex "$@"
+  '';
+
   home = "/home/uynx";
 in
 {
@@ -851,6 +878,8 @@ in
       size = 24;
     };
     packages = with pkgs; [
+      update-antigravity
+      codex
       steam-asahi
       steam-asahi-bootstrap
       steam-asahi-doctor
