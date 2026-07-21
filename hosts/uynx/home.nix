@@ -819,39 +819,6 @@ let
     print("Updated brave-origin.nix successfully!")
   '';
 
-  update-antigravity = pkgs.writeShellScriptBin "update-antigravity" ''
-    set -eu
-    TARGET_DIR="$HOME/.local/share/antigravity"
-    if [ "$#" -lt 1 ]; then
-      echo "Usage: update-antigravity <tarball_url_or_file_path>"
-      exit 1
-    fi
-    SOURCE="$1"
-    mkdir -p "$TARGET_DIR"
-    TMP=$(mktemp -d)
-    trap 'rm -rf "$TMP"' EXIT
-    if [[ "$SOURCE" =~ ^https?:// ]]; then
-      echo "Downloading Antigravity from $SOURCE..."
-      ${pkgs.curl}/bin/curl -sSL "$SOURCE" -o "$TMP/antigravity.tar.gz"
-      TARFILE="$TMP/antigravity.tar.gz"
-    else
-      TARFILE="$SOURCE"
-    fi
-    echo "Extracting to $TARGET_DIR..."
-    ${pkgs.gnutar}/bin/tar -xzf "$TARFILE" -C "$TARGET_DIR" --strip-components=1
-    echo "Antigravity extracted successfully to $TARGET_DIR."
-  '';
-
-  codex = pkgs.writeShellScriptBin "codex" ''
-    exec ${pkgs.nodejs}/bin/npx -y @openai/codex "$@"
-  '';
-
-  update-agy = pkgs.writeShellScriptBin "update-agy" ''
-    set -eu
-    echo "Installing/Updating agy CLI..."
-    ${pkgs.curl}/bin/curl -fsSL https://antigravity.google.com/install.sh | ${pkgs.bash}/bin/bash
-  '';
-
   home = "/home/uynx";
 in
 {
@@ -884,9 +851,6 @@ in
       size = 24;
     };
     packages = with pkgs; [
-      update-antigravity
-      update-agy
-      codex
       steam-asahi
       steam-asahi-bootstrap
       steam-asahi-doctor
@@ -1080,7 +1044,18 @@ in
         "${home}/ai_memory/concepts" \
         "${home}/ai_memory/journal" \
         "${home}/dotfiles" \
-        "${home}/nixos-config"
+        "${home}/nixos-config" \
+        "${home}/.local/share/antigravity"
+    '';
+    activation.installAgy = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      if [ ! -f "${home}/.local/bin/agy" ]; then
+        ${pkgs.curl}/bin/curl -fsSL https://antigravity.google.com/install.sh | ${pkgs.bash}/bin/bash
+      fi
+    '';
+    activation.installCodex = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      if [ ! -f "${home}/.local/bin/codex" ]; then
+        ${pkgs.nodejs}/bin/npx -y @openai/codex --version >/dev/null 2>&1 || true
+      fi
     '';
     activation.generateSteamGameEntries = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       ${steam-game-entries}/bin/steam-game-entries
