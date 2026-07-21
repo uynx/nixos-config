@@ -93,7 +93,35 @@
   programs = {
     fish.enable = true;
     hyprland.enable = true;
-    nix-ld.enable = true;
+    nix-ld = {
+      enable = true;
+      libraries = with pkgs; [
+        glib
+        gtk3
+        pango
+        cairo
+        atk
+        at-spi2-core
+        nspr
+        nss
+        libX11
+        libXcomposite
+        libXdamage
+        libXext
+        libXfixes
+        libXrandr
+        libxcb
+        libxkbcommon
+        mesa
+        libgbm
+        libglvnd
+        expat
+        dbus
+        cups
+        alsa-lib
+        systemd
+      ];
+    };
   };
 
   environment.systemPackages = with pkgs; [
@@ -103,7 +131,6 @@
     curl
     ghostty
     fuzzel
-    antigravity
     brightnessctl
   ];
 
