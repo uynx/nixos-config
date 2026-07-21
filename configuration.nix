@@ -93,6 +93,7 @@
   programs = {
     fish.enable = true;
     hyprland.enable = true;
+    nix-ld.enable = true;
   };
 
   environment.systemPackages = with pkgs; [

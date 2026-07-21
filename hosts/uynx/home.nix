@@ -928,6 +928,7 @@ in
       cameractrls-gtk4
       v4l-utils
       mpv
+      fetch
     ];
     file = {
       ".config/nvim".source = config.lib.file.mkOutOfStoreSymlink "${home}/dotfiles/nvim";
