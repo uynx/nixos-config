@@ -1026,16 +1026,6 @@ in
         data_format = ascii
         ascii_max_range = 7
       '';
-      ".config/hu.irl.cameractrls/usb-046d_HD_Pro_Webcam_C920_7BE3D69F-video-index0.ini".text = ''
-        [preset_1]
-        focus_automatic_continuous = 0
-        focus_absolute = 40
-      '';
-      ".config/hu.irl.cameractrls/usb-046d_HD_Pro_Webcam_C920_2974D69F-video-index0.ini".text = ''
-        [preset_1]
-        focus_automatic_continuous = 0
-        focus_absolute = 40
-      '';
     };
     activation.copilotBridge = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       AUTH_DB="${home}/.config/github-copilot/auth.db"
@@ -1070,6 +1060,18 @@ in
   dconf.settings."org/gnome/desktop/interface".color-scheme = "prefer-dark";
 
   xdg.desktopEntries = {
+    antigravity = {
+      name = "Antigravity";
+      genericName = "Text Editor";
+      comment = "Antigravity AI Code Editor";
+      exec = "/home/uynx/.local/share/antigravity/antigravity %U";
+      icon = "antigravity";
+      type = "Application";
+      categories = [
+        "Development"
+        "IDE"
+      ];
+    };
     steam = {
       name = "Steam";
       genericName = "Games Store";
