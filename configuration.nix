@@ -40,6 +40,7 @@
       enable = true;
       wifi.backend = "iwd";
     };
+    firewall.allowedTCPPorts = [ 3389 5900 ];
   };
 
   time.timeZone = "America/Chicago";
@@ -132,10 +133,16 @@
     ghostty
     fuzzel
     brightnessctl
+    wayvnc
   ];
 
   services = {
     blueman.enable = true;
+    xrdp = {
+      enable = true;
+      defaultWindowManager = "hyprland";
+      openFirewall = true;
+    };
     xserver = {
       enable = true;
       xkb = {
