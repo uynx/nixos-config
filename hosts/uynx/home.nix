@@ -696,16 +696,36 @@ let
     exec ${steam-asahi-run}/bin/steam-asahi-run "$APP_ID"
   '';
 
+  antigravity-launcher = pkgs.writeShellScriptBin "antigravity-launcher" ''
+    set -eu
+
+    HAS_WINDOW=$(${H} clients -j 2>/dev/null | ${J} -r '.[] | select(((.class // "") | ascii_downcase) == "antigravity") | .pid' 2>/dev/null || true)
+    if [ -z "$HAS_WINDOW" ]; then
+      ${pkgs.procps}/bin/pkill -f "/.local/share/antigravity/antigravity" 2>/dev/null || true
+      sleep 0.1
+    fi
+    exec /home/uynx/.local/share/antigravity/antigravity "$@"
+  '';
+
   hypr-close-active = pkgs.writeShellScriptBin "hypr-close-active" ''
     set -eu
 
     ACTIVE=$(${H} activewindow -j 2>/dev/null || echo '{}')
     CLASS=$(printf '%s' "$ACTIVE" | ${J} -r '.class // ""' 2>/dev/null || true)
+    PID=$(printf '%s' "$ACTIVE" | ${J} -r '.pid // 0' 2>/dev/null || true)
     case "$CLASS" in
       steam|Steam|steam_app_[0-9]*|cs2)
         # The VM is the reliable process boundary. Closing only the XWayland
         # window can leave Proton and the game running headless.
         exec ${steam-asahi-stop}/bin/steam-asahi-stop
+        ;;
+      antigravity|Antigravity)
+        # Electron app leaves headless process + SingletonSocket if only window closed.
+        # Kill the main process tree directly so it exits fully and cleans up.
+        if [ "$PID" -gt 0 ] 2>/dev/null; then
+          kill -15 "$PID" 2>/dev/null || kill -9 "$PID" 2>/dev/null || true
+        fi
+        ${pkgs.procps}/bin/pkill -f "/.local/share/antigravity/antigravity" 2>/dev/null || true
         ;;
       *)
         exec ${H} dispatch closewindow active
@@ -918,6 +938,7 @@ in
       tmuxPlugins.resurrect
       tmuxPlugins.continuum
       monitor-hotplug
+      antigravity-launcher
       hypr-close-active
       steam-game-entries
       steam-fuzzel
@@ -1075,7 +1096,7 @@ in
       name = "Antigravity";
       genericName = "Text Editor";
       comment = "Antigravity AI Code Editor";
-      exec = "/home/uynx/.local/share/antigravity/antigravity %U";
+      exec = "${antigravity-launcher}/bin/antigravity-launcher %U";
       icon = "antigravity";
       type = "Application";
       categories = [
