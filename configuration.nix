@@ -134,6 +134,7 @@
     fuzzel
     brightnessctl
     wayvnc
+    kdePackages.krdp
   ];
 
   services = {
