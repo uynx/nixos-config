@@ -162,10 +162,19 @@
   virtualisation.waydroid.enable = true;
   virtualisation.waydroid.package = pkgs.waydroid-nftables;
   security.pam.services.greetd.enableGnomeKeyring = true;
-  fonts.packages = with pkgs; [
-    nerd-fonts.hack
-    julia-mono
-  ];
+  fonts = {
+    fontconfig.enable = true;
+    packages = with pkgs; [
+      nerd-fonts.hack
+      julia-mono
+      cantarell-fonts
+      dejavu_fonts
+      liberation_ttf
+      noto-fonts
+      noto-fonts-cjk-sans
+      noto-fonts-color-emoji
+    ];
+  };
   console.useXkbConfig = true;
   system.stateVersion = "26.05";
 }
