@@ -132,27 +132,11 @@
     ghostty
     fuzzel
     brightnessctl
-    (symlinkJoin {
-      name = "rustdesk";
-      paths = [ rustdesk-flutter ];
-      nativeBuildInputs = [ makeWrapper ];
-      postBuild = ''
-        wrapProgram $out/bin/rustdesk \
-          --set GALLIUM_DRIVER llvmpipe \
-          --set FONTCONFIG_FILE "${pkgs.makeFontsConf {
-            fontDirectories = with pkgs; [
-              cantarell-fonts
-              dejavu_fonts
-              noto-fonts
-              liberation_ttf
-              roboto
-            ];
-          }}"
-      '';
-    })
+    flatpak
   ];
 
   services = {
+    flatpak.enable = true;
     blueman.enable = true;
     xserver = {
       enable = true;
