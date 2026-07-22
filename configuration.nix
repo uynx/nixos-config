@@ -176,6 +176,15 @@
       noto-fonts-color-emoji
     ];
   };
+  xdg.portal = {
+    enable = true;
+    extraPortals = with pkgs; [
+      xdg-desktop-portal-hyprland
+      xdg-desktop-portal-gtk
+    ];
+    config.common.default = [ "hyprland" "gtk" ];
+  };
+
   console.useXkbConfig = true;
   system.stateVersion = "26.05";
 }
