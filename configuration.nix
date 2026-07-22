@@ -132,7 +132,14 @@
     ghostty
     fuzzel
     brightnessctl
-    rustdesk
+    (symlinkJoin {
+      name = "rustdesk";
+      paths = [ rustdesk-flutter ];
+      nativeBuildInputs = [ makeWrapper ];
+      postBuild = ''
+        wrapProgram $out/bin/rustdesk --set GALLIUM_DRIVER llvmpipe
+      '';
+    })
   ];
 
   services = {
