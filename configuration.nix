@@ -132,7 +132,7 @@
     ghostty
     fuzzel
     brightnessctl
-    rustdesk-flutter
+    rustdesk
   ];
 
   services = {
