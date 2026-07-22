@@ -132,11 +132,9 @@
     ghostty
     fuzzel
     brightnessctl
-    flatpak
   ];
 
   services = {
-    flatpak.enable = true;
     blueman.enable = true;
     xserver = {
       enable = true;
