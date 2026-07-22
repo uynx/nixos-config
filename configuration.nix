@@ -137,7 +137,17 @@
       paths = [ rustdesk-flutter ];
       nativeBuildInputs = [ makeWrapper ];
       postBuild = ''
-        wrapProgram $out/bin/rustdesk --set GALLIUM_DRIVER llvmpipe
+        wrapProgram $out/bin/rustdesk \
+          --set GALLIUM_DRIVER llvmpipe \
+          --set FONTCONFIG_FILE "${pkgs.makeFontsConf {
+            fontDirectories = with pkgs; [
+              cantarell-fonts
+              dejavu_fonts
+              noto-fonts
+              liberation_ttf
+              roboto
+            ];
+          }}"
       '';
     })
   ];
