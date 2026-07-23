@@ -1073,11 +1073,6 @@ in
         ${pkgs.curl}/bin/curl -fsSL https://antigravity.google.com/install.sh | ${pkgs.bash}/bin/bash
       fi
     '';
-    activation.installCodex = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      if [ ! -f "${home}/.local/bin/codex" ]; then
-        ${pkgs.nodejs}/bin/npx -y @openai/codex --version >/dev/null 2>&1 || true
-      fi
-    '';
     activation.generateSteamGameEntries = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       ${steam-game-entries}/bin/steam-game-entries
     '';
