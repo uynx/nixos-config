@@ -862,6 +862,10 @@ in
       PROTON_PASS_KEY_PROVIDER = "fs";
       GSK_RENDERER = "gl";
     };
+    sessionPath = [
+      "${home}/.grok/bin"
+      "${home}/.local/bin"
+    ];
     pointerCursor = {
       enable = true;
       gtk.enable = true;
@@ -1071,6 +1075,11 @@ in
     activation.installAgy = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       if [ ! -f "${home}/.local/bin/agy" ]; then
         ${pkgs.curl}/bin/curl -fsSL https://antigravity.google.com/install.sh | ${pkgs.bash}/bin/bash
+      fi
+    '';
+    activation.installGrok = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      if [ ! -f "${home}/.grok/bin/grok" ]; then
+        ${pkgs.curl}/bin/curl -fsSL https://x.ai/cli/install.sh | ${pkgs.bash}/bin/bash || true
       fi
     '';
     activation.generateSteamGameEntries = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
