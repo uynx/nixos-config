@@ -886,7 +886,6 @@ in
       gping
       doggo
       obsidian
-      grok-build
       tokei
       hyperfine
       bandwhich
@@ -1077,6 +1076,11 @@ in
     activation.installCodex = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       if [ ! -f "${home}/.local/bin/codex" ]; then
         ${pkgs.nodejs}/bin/npx -y @openai/codex --version >/dev/null 2>&1 || true
+      fi
+    '';
+    activation.installGrok = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      if [ ! -f "${home}/.local/bin/grok" ]; then
+        SHELL="" ${pkgs.curl}/bin/curl -fsSL https://x.ai/cli/install.sh | SHELL="" ${pkgs.bash}/bin/bash
       fi
     '';
     activation.generateSteamGameEntries = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
