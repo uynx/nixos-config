@@ -1082,6 +1082,11 @@ in
         ${pkgs.curl}/bin/curl -fsSL https://x.ai/cli/install.sh | ${pkgs.bash}/bin/bash || true
       fi
     '';
+    activation.installCodex = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      if [ ! -f "${home}/.local/bin/codex" ]; then
+        ${pkgs.nodejs}/bin/npm install -g --prefix ${home}/.local @openai/codex || true
+      fi
+    '';
     activation.generateSteamGameEntries = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       ${steam-game-entries}/bin/steam-game-entries
     '';
