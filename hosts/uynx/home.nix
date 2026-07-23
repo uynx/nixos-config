@@ -886,6 +886,7 @@ in
       gping
       doggo
       obsidian
+      grok-build
       tokei
       hyperfine
       bandwhich
