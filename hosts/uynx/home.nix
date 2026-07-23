@@ -1087,6 +1087,11 @@ in
         ${pkgs.nodejs}/bin/npm install -g --prefix ${home}/.local @openai/codex || true
       fi
     '';
+    activation.installClaude = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      if [ ! -f "${home}/.local/bin/claude" ]; then
+        ${pkgs.curl}/bin/curl -fsSL https://claude.ai/install.sh | ${pkgs.bash}/bin/bash || true
+      fi
+    '';
     activation.generateSteamGameEntries = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       ${steam-game-entries}/bin/steam-game-entries
     '';
